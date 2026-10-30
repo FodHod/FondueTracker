@@ -29,8 +29,8 @@ jobs:
       # Cache node_modules
       - uses: actions/setup-node@v6.4.0
         name: Setup Node.js
-        working-directory: code/api
         with:
+          working-directory: code/api
           node-version-file: '.nvmrc'
           cache: 'npm'
 
