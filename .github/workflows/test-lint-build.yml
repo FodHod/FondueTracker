@@ -1,0 +1,66 @@
+name: Build image
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*' ]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  attestations: write
+  id-token: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  main:
+    environment:
+      name: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 1
+
+      # Cache node_modules
+      #- uses: actions/setup-node@v6.4.0
+      #  name: Setup Node.js
+      #  with:
+      #    node-version-file: '.nvmrc'
+      #    cache: 'npm'
+
+      #- run: npm ci
+      #  name: Install Dependencies
+
+      - uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        name: Log in to GitHub Container Registry
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v7.0.0
+        with:
+          context: code/
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          file: code/Dockerfile
