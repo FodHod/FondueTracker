@@ -51,7 +51,6 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
             type=ref,event=tag
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}
@@ -76,7 +75,7 @@ jobs:
           K8S_CA: ${{ secrets.K8S_CA }}
         run: |
           printf '%s' "$K8S_CA" > ca.crt
-          sed "s|:latest|:${GITHUB_REF_NAME}|" code/infrastructure/deployment.yaml \
+          sed "s|:latest|:sha-${GITHUB_SHA}|" code/infrastructure/deployment.yaml \
             | kubectl \
             --server "$K8S_SERVER" \
             --token "$K8S_TOKEN" \
