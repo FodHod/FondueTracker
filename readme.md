@@ -1,17 +1,44 @@
-# BaselHack Code Repo Template
+# ---INSERT PROJECT NAME--- 
 
-This is the template repository, which makes our lives (and especially the lives of the jury) easier,
-if you follow our structure.
+A short, clear description of what your project does and who it helps.
 
-## Explanation
+## The Problem
 
-Please make sure that everything, that is code related, goes into `code` directory.
+What problem are you solving? Why does it matter?
 
-If you have documentation about the code (e.g. UML Diagrams, a readme etc.), that should go into the `documentation` directory.
+## Our Solution
 
-If you have assets (like videos, presentations etc.), this can go into the `assets` directory.
+How does your project solve the problem? What makes it useful or different?
 
-You can use the MIT license in this template. Make sure to adjust the copy right holders in the placeholder `<copyright holder>` and add every team member to it.
-You are also free to choose any other license - depending on the consensus of your team.
+## Demo
 
-Thanks a lot!
+- **Live demo:** [Add link]
+- **Screenshots:** Add images here
+
+## Features
+
+- Feature one
+- Feature two
+- Feature three
+
+## Tech Stack
+
+- **Frontend:** 
+- **Backend:** 
+- **Database:** 
+- **Tools/APIs:** 
+
+## Getting Started
+
+### Prerequisites
+
+- [Required language, runtime, or tool]
+- [Any accounts, API keys, or services needed]
+
+### Installation
+
+```bash
+git clone <repository-url>
+cd <project-folder>
+# Install dependencies
+
