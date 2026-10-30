@@ -11,7 +11,8 @@ spec:
   selector:
     matchLabels:
       app: fonduetracker
-  strategy: {}
+  strategy:
+    type: Recreate
   template:
     metadata:
       creationTimestamp: null
