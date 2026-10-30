@@ -61,7 +61,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          file: code/api/Dockerfile.api
+          file: code/api/Dockerfile
 
       - name: Set up kubectl
         uses: Azure/setup-kubectl@v5
