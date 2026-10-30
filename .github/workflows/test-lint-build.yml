@@ -2,9 +2,7 @@ name: Build image
 
 on:
   push:
-    branches: [ main ]
     tags: [ '*' ]
-  workflow_dispatch:
 
 permissions:
   actions: read
@@ -63,4 +61,20 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          file: code/Dockerfile
+          file: code/api/Dockerfile.api
+
+      - name: Set up kubectl
+        uses: Azure/setup-kubectl@v5
+
+      - name: Apply manifests to cluster
+        env:
+          K8S_SERVER: ${{ secrets.K8S_SERVER }}
+          K8S_TOKEN: ${{ secrets.K8S_TOKEN }}
+          K8S_CA: ${{ secrets.K8S_CA }}
+        run: |
+          printf '%s' "$K8S_CA" > ca.crt
+          sed "s|:latest|:${GITHUB_REF_NAME}|" code/infrastructure/deployment.yaml \
+            | kubectl apply -f - \
+            --server "$K8S_SERVER" \
+            --token "$K8S_TOKEN" \
+            --certificate-authority ca.crt
