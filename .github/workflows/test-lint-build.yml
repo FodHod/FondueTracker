@@ -1,6 +1,7 @@
 name: Build image
 
 on:
+  workflow_dispatch:
   push:
     tags: [ '*' ]
 
@@ -68,7 +69,7 @@ jobs:
 
       - name: Apply manifests to cluster
         env:
-          K8S_SERVER: ${{ secrets.K8S_SERVER }}
+          K8S_SERVER: ${{ vars.K8S_SERVER }}
           K8S_TOKEN: ${{ secrets.K8S_TOKEN }}
           K8S_CA: ${{ secrets.K8S_CA }}
         run: |
