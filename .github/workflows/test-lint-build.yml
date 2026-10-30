@@ -31,6 +31,7 @@ jobs:
         name: Setup Node.js
         with:
           node-version-file: 'code/api/.nvmrc'
+          cache-dependency-path: 'code/api/package-lock.json'
           cache: 'npm'
 
       - run: npm ci
