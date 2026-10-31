@@ -1,6 +1,8 @@
-# ---INSERT PROJECT NAME---
+# Fond(of)u(e)
 
-A short, clear description of what your project does and who it helps.
+Enjoy your Fondue Chinoise without worrying about cooking times! Our smart cooking assistant combines camera
+recognition, temperature monitoring and individual cooking timers to help everyone get their meat PERFECT. While the
+technology takes care of the details, you can focus on what really matters: enjoying a great meal together!
 
 ## The Problem
 
@@ -14,23 +16,22 @@ Our solution is simple and non-intrusive. Achieving high accuracy in predicting 
 
 ## Demo
 
-- **Live demo:** [Add link]
-- **Screenshots:** Add images here
+- **Live demo:** [https://fonduetracker.rovner.ch/](Link)
 
 ## Features
 
-- Feature Gabel Detection
-- Feature Meat Doneness Algorithm
-- Feature XYZ
+- Gabel Detection
+- Meat Doneness Algorithm
+- Non-intrusive Progress Display
 
 ## Tech Stack
 
-- **Frontend:**
+- **Frontend:** aka Fonduend
     - React (Typescript)
     - Vite
     - ESLint
     - Tailwind
-- **Backend:**
+- **Backend:** aka Beefend
     - Python
     - Express Server (NodeJS, Typescript)
 - **Tools/API:**
@@ -47,7 +48,6 @@ Our solution is simple and non-intrusive. Achieving high accuracy in predicting 
 ### Prerequisites
 
 - Python >=3.11
-- [Any accounts, API keys, or services needed]
 
 ### Installation Local
 
