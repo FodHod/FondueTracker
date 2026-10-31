@@ -123,6 +123,19 @@ def camera_frames(source: str):
         finally:
             cap.release()
 
+x_min = 200
+x_max = 600
+y_min = 200
+y_max = 600
+def is_in_pot(tag):
+    x, y = tag["x"], tag["y"]
+    in_pot = x_min < x < x_max and y_min < y < y_max
+    return {"id":tag["id"], "in_pot": in_pot}
+
+def create_output(tags):
+    processed_tags = [is_in_pot(tag) for tag in tags]
+    output = {"time": time.time(), "temperature": 27, "tags": processed_tags}
+    return output
 
 def on_tags(tags: list[dict], t_s: float):
     """Called at most every SEND_INTERVAL with the current tags; POSTs them to SEND_URL."""
@@ -131,7 +144,7 @@ def on_tags(tags: list[dict], t_s: float):
         return
     try:
         # Short timeout: this runs inside the camera loop, so a slow server stalls the preview.
-        r = requests.post(SEND_URL, json={"time": time.time(), "tags": tags}, timeout=0.5)
+        r = requests.post(SEND_URL, json=create_output(tags), timeout=0.5)
         print(f"         -> {r.status_code}")
     except requests.RequestException as e:
         print(f"         -> send failed: {e}")
