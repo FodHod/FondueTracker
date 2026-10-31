@@ -78,8 +78,9 @@ export function createSensorRouter(store: SensorStore, token: string | undefined
             })
             return
         }
-        store.append(req.params.dinnerId, measurement)
-        res.status(201).json(measurement)
+        // convert to milliseconds
+        store.append(req.params.dinnerId, { ...measurement, time: measurement.time * 1000 });
+        res.status(201).json(measurement);
     })
 
     return router

@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { FOOD_CATALOG, findFood, hasPref } from '../catalog'
-import type { ForkStore } from '../store'
+import type {ForkStore, SensorStore} from '../store'
 import type { Food, FoodPrefChoice } from '../types'
+import {fondueInfo} from "../fondue-math";
 
 const MAX_USER_NAME = 30
 
@@ -26,12 +27,33 @@ function readPrefRecord(value: unknown): FoodPrefChoice | null {
  * one fork per guest, full preference declaration), and update the food
  * and/or preferences of a fork the session holds.
  */
-export function createForksRouter(store: ForkStore): Router {
+export function createForksRouter(store: ForkStore, sensorStore: SensorStore): Router {
     const router = Router()
 
     router.get('/', (req, res) => {
         // The session user's own fork leads the list; the rest follow in id order.
-        const forks = store.list()
+        const forks = store
+            .list()
+            .map((fork) => {
+                if (fork.foodPrefs === null) {
+                    return {
+                        ...fork,
+                        progress: 0,
+                    };
+                }
+                const prefsForFood = fork.foodPrefs.filter((pref) => pref.foodId === fork.food?.foodId);
+                // TODO: temperature should come from the sensor
+                const startTs = sensorStore.getFlipTime(fork.id, fork.dinnerId);
+                console.log(`fork ${fork.id} flipTime: ${startTs?.flipTime}`);
+                if (!startTs) {
+                    return {
+                        ...fork,
+                        progress: 0,
+                    };
+                }
+                const forkInfo = fondueInfo(fork.food!.foodId, prefsForFood.length > 0 ? prefsForFood[0].prefId : fork.food!.prefs[0].id, 90, startTs!.flipTime)
+                return { ...fork, progress: forkInfo.progress };
+            });
         forks.sort((a, b) => {
             const own = Number(b.userId === req.userId) - Number(a.userId === req.userId)
             if (own !== 0) {
