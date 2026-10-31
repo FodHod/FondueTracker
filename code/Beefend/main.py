@@ -19,15 +19,9 @@ SEND_INTERVAL = 1.0
 SEND_URL = "https://fonduetracker.rovner.ch/api/sensor/default"
 # SEND_URL = "http://127.0.0.1:8000/tags"
 
-# Marker to track: "rings" (ring barcode, tracker.py) or "apriltag".
 MARKER = "rings"
-# Ring unit u in full-res pixels at your camera distance: run `python tracker.py frame.jpg`
-# on a captured frame and copy the u it prints.
 RING_UNIT_PX = 8
-# Low-res search pass as a fraction of the frame (0.4 = 512x288 from 1280x720); reading is
-# always full res. Lower = faster; keep RING_UNIT_PX * SEARCH_SCALE >= 3.
 SEARCH_SCALE = 0.4
-# "picam", a webcam index like "0", or a stream URL.
 CAMERA = "picam"
 
 DETECTOR = cv2.aruco.ArucoDetector(
@@ -143,7 +137,7 @@ def on_tags(tags: list[dict], now: float):
     }
     try:
         if tags and now - last_sent >= SEND_INTERVAL:
-            print(f"{now:6.1f}s {len(tags)} tags: {sorted({t['id'] for t in tags})}")
+            print(f"{now:6.1f}s {len(tags)} tags: {sorted({t['id'] for t in smoothed_tags})}")
             send_queue.put_nowait(smoothed_output)
             last_sent = now
     except queue.Full:
