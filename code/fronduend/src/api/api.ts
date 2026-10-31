@@ -18,9 +18,14 @@ function getMyFork() {
     return axios.get<Fork>("/api/forks/mine");
 }
 
+function updateFork(fork: Fork) {
+    return axios.put("/api/forks", fork)
+}
+
 export default {
     getForks,
     getFoods,
     postFork,
-    getMyFork
+    getMyFork,
+    updateFork
 }
