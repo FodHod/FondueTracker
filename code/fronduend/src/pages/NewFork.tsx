@@ -4,7 +4,7 @@ import type {Food, FoodPrefChoice, Fork} from "../api/types.ts";
 import api from "../api/api.ts";
 
 type NewForkForm = {
-    id: string;
+    forkId: string;
     userName: string;
     foodPrefs: FoodPrefChoice[]
 }
@@ -12,7 +12,7 @@ type NewForkForm = {
 export default function NewFork() {
 
     const [form, setForm] = useState<NewForkForm>({
-        id: "",
+        forkId: "",
         userName: "",
         foodPrefs: []
     });
@@ -30,10 +30,28 @@ export default function NewFork() {
         })
     }, [])
 
+    const changeFoodPref: React.ChangeEventHandler<HTMLInputElement> = e => {
+        const prefId = e.target.value;
+        const foodId = e.target.name;
+
+        setForm(prev => {
+            const exists = prev.foodPrefs.some(pref => pref.foodId == foodId);
+
+            return {
+                ...prev,
+                foodPrefs: exists
+                    ? prev.foodPrefs.map(pref =>
+                        pref.foodId == foodId ? {prefId, foodId} : pref
+                    )
+                    : [...prev.foodPrefs, {prefId, foodId}]
+            }
+        })
+    }
+
     const onSubmit: React.SubmitEventHandler<HTMLFormElement> = (e) => {
         e.preventDefault();
         api.postFork({
-            id: form.id,
+            id: form.forkId,
             userName: form.userName,
             foodPrefs: form.foodPrefs,
             food: undefined,
@@ -58,16 +76,30 @@ export default function NewFork() {
             {foods.map(food => <fieldset key={food.foodId}>
                 <h3>{food.foodName}</h3>
                 {food.prefs.map(pref => <label key={pref.id}>
-                        <input type={"radio"} name={food.foodName} value={pref.id}/>
+                        <input
+                            type={"radio"}
+                            name={food.foodId}
+                            value={pref.id}
+                            onChange={changeFoodPref}
+                        />
                         {pref.name}
                     </label>
                 )}
             </fieldset>)}
             <h2>Choose fork</h2>
             {forks.map(fork => <label key={fork.id}>
-                <input type={"radio"} name={"fork"} value={fork.id}/>
+                <input
+                    type={"radio"}
+                    name={"fork"}
+                    value={fork.id}
+                    onChange={e => setForm(prev => ({
+                        ...prev,
+                        forkId: e.target.value
+                    }))}
+                />
                 {fork.id}
             </label>)}
+            <input type={"submit"} value={"Choose Fork"}/>
         </form>
     </>
 }
