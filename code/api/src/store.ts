@@ -1,5 +1,5 @@
 import { FOOD_CATALOG } from './catalog'
-import type { Fork, Food } from './types'
+import type { Fork, Food, SensorMeasurement } from './types'
 
 /** The single dinner this deployment hosts; dinner rooms come later. */
 const DEFAULT_DINNER_ID = 'default'
@@ -131,4 +131,36 @@ export function createForkStore() {
     }
 
     return { list, get, forUser, holdsFork, assign, setFood, setPref }
+}
+
+function cloneMeasurement(m: SensorMeasurement): SensorMeasurement {
+    return { time: m.time, temperature: m.temperature, tags: m.tags.map((tag) => ({ ...tag })) }
+}
+
+export type SensorStore = ReturnType<typeof createSensorStore>
+
+/**
+ * The in-memory sensor log: an append-only list of measurements per dinner,
+ * keyed by the dinnerId in the sensor route path. Resets with the process;
+ * deliberately unbounded — a dinner is hours, not weeks.
+ */
+export function createSensorStore() {
+    const log = new Map<string, SensorMeasurement[]>()
+
+    /** Appends a copy of the measurement to the dinner's log. */
+    function append(dinnerId: string, measurement: SensorMeasurement): void {
+        const entries = log.get(dinnerId)
+        if (entries) {
+            entries.push(cloneMeasurement(measurement))
+        } else {
+            log.set(dinnerId, [cloneMeasurement(measurement)])
+        }
+    }
+
+    /** The dinner's measurements, oldest first, as copies. */
+    function list(dinnerId: string): SensorMeasurement[] {
+        return (log.get(dinnerId) ?? []).map(cloneMeasurement)
+    }
+
+    return { append, list }
 }

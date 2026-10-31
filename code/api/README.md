@@ -30,6 +30,11 @@ A fork whose `userId`/`userName` are `null` is unclaimed and available.
 food type. Every guest declares exactly one choice per food when claiming and
 can revise them later; the full set rides on their fork in every response.
 
+**SensorMeasurement** — `{ time, temperature, tags }`: one pot-sensor report.
+`time` is epoch seconds, `temperature` the pot temperature, and `tags` the
+fork tags currently in the pot — `{ id, in_pot }`, the device's wire format
+and the API's one snake_case exception.
+
 **User** — has no entity of its own: the `_session` cookie (opaque UUID, HttpOnly)
 is the identity. A `userId` in a request body is always ignored.
 
@@ -106,6 +111,25 @@ neither is rejected.
 There is deliberately no release or rename endpoint in v1: a claimed fork stays
 claimed until the process restarts.
 
+### POST /api/sensor/:dinnerId
+
+The device endpoint — the pot sensor reports a measurement for the dinner
+named in the path (the frontend's four endpoints are unaffected):
+
+```json
+{
+  "time": 1793443169.0806723,
+  "temperature": 27,
+  "tags": [ { "id": 7, "in_pot": true } ]
+}
+```
+
+`time` and `temperature` must be numbers, `tags` an array of `{ id, in_pot }`
+records (possibly empty); extra fields are ignored. The measurement is
+appended to that dinner's in-memory log — nothing reads it yet, and it resets
+with the process. Responds `201` with the stored measurement. No session is
+required: the sensor may simply ignore the `_session` cookie the API offers.
+
 ## Trying it with curl
 
 With the dev server running (`npm run dev`), the cookie jar plays the role of the
@@ -158,6 +182,9 @@ curl -s -b cookies.txt -c cookies.txt -X PUT http://localhost:8082/api/forks \
 curl -s -b cookies.txt -c cookies.txt -X PUT http://localhost:8082/api/forks \
   -H 'Content-Type: application/json' \
   -d "$(jq -nc --arg id "$FORK" '{id: $id, food: null}')" | jq
+
+# Show just my fork
+curl -s -b cookies.txt -c cookies.txt http://localhost:8082/api/forks/mine
 
 # The food catalog (no cookie needed).
 curl -s http://localhost:8082/api/foods | jq

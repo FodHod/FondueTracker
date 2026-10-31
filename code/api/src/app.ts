@@ -2,9 +2,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
 import { sessionMiddleware } from './session'
-import { createForkStore } from './store'
+import { createForkStore, createSensorStore } from './store'
 import { createForksRouter } from './routes/forks'
 import { createFoodsRouter } from './routes/foods'
+import { createSensorRouter } from './routes/sensor'
 
 const publicDir = fileURLToPath(new URL('../public', import.meta.url))
 
@@ -22,6 +23,9 @@ export function createApp() {
     const store = createForkStore()
     app.use('/api/forks', createForksRouter(store))
     app.use('/api/foods', createFoodsRouter())
+
+    // The pot sensor's measurement log, keyed by the dinnerId in its path.
+    app.use('/api/sensor', createSensorRouter(createSensorStore()))
 
     // Liveness endpoint for the Docker HEALTHCHECK and k8s probes.
     app.get('/healthz', (_req, res) => {

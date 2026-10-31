@@ -26,3 +26,14 @@ export type Fork = {
     color: string;
 }
 
+export type ForkState = {
+    id: number;
+    in_pot: boolean;
+}
+
+export type SensorMeasurement = {
+    time: number;
+    temperature: number;
+    tags: ForkState[];
+}
+
