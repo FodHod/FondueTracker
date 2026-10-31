@@ -58,6 +58,11 @@ user holds (if any) comes first; the rest follow in id order. Each claimed
 fork carries its holder's `foodPrefs` — the exhaustive one-choice-per-food
 set, in catalog order. Unclaimed forks have `foodPrefs: null`.
 
+Every item also carries `inPot`: true while the pot sensor's latest report
+has the fork in the pot, false otherwise — a fork the sensor has never
+reported reads as out of the pot. Like `progress`, `inPot` is computed per
+request and appears only on this endpoint.
+
 This is the only endpoint that computes `progress`. For a claimed fork with
 food on it, the API reads the fork's materialized dip state — when its
 current or last dip started, and when it ended, if the fork has left the

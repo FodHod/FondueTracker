@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app'
 import { fullFoodPrefs } from './helpers'
-import type { Fork, Food } from '../src/types'
+import type { Fork, Food, ForkListItem } from '../src/types'
 
 type Agent = ReturnType<typeof request.agent>
 
@@ -19,6 +19,70 @@ async function claim(agent: Agent, forkId: string, userName: string) {
 async function setFood(agent: Agent, forkId: string, food: unknown) {
     return agent.put('/api/forks').send({ id: forkId, food })
 }
+
+describe('GET /api/forks (inPot)', () => {
+    const ORIGINAL_TOKEN = process.env.SENSOR_TOKEN
+    let app: ReturnType<typeof createApp>
+
+    beforeEach(() => {
+        process.env.SENSOR_TOKEN = 'test-token'
+        app = createApp()
+    })
+
+    afterEach(() => {
+        if (ORIGINAL_TOKEN === undefined) {
+            delete process.env.SENSOR_TOKEN
+        } else {
+            process.env.SENSOR_TOKEN = ORIGINAL_TOKEN
+        }
+    })
+
+    /** Reports the pot sensor: one tag, in or out of the pot. */
+    async function report(tagId: number, inPot: boolean) {
+        const res = await request(app)
+            .post('/api/sensor/default')
+            .set('Authorization', 'Bearer test-token')
+            .send({ time: 1793443169.0806723, temperature: 90, tags: [{ id: tagId, in_pot: inPot }] })
+        expect(res.status).toBe(201)
+    }
+
+    async function listForks(): Promise<ForkListItem[]> {
+        const res = await request.agent(app).get('/api/forks').set('Accept', 'application/json')
+        expect(res.status).toBe(200)
+        return res.body as ForkListItem[]
+    }
+
+    it('marks every fork out of the pot before any sensor report', async () => {
+        const forks = await listForks()
+        expect(forks).toHaveLength(8)
+        for (const fork of forks) {
+            expect(fork.inPot).toBe(false)
+        }
+    })
+
+    it('is true for the fork the sensor reports in the pot, false for the rest', async () => {
+        await report(1, true)
+        const inPot = (await listForks()).filter((f) => f.inPot)
+        expect(inPot.map((f) => f.id)).toEqual(['fork-1'])
+    })
+
+    it('flips back to false once a later report shows the fork out', async () => {
+        await report(1, true)
+        await report(1, false)
+        const forks = await listForks()
+        expect(forks.every((f) => !f.inPot)).toBe(true)
+    })
+
+    it('covers unclaimed forks too — a fork need not be claimed to be in the pot', async () => {
+        await report(3, true)
+        const forks = await listForks()
+        const fork3 = forks.find((f) => f.id === 'fork-3') as ForkListItem
+        expect(fork3.inPot).toBe(true)
+        expect(fork3.userId).toBeNull()
+        expect(fork3.foodPrefs).toBeNull()
+        expect(fork3.progress).toBe(0)
+    })
+})
 
 describe('POST /api/forks (claim)', () => {
     it('rejects unknown forks with 404', async () => {

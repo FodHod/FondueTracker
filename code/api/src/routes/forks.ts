@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { FOOD_CATALOG, findFood, hasPref } from '../catalog'
 import type {ForkStore, SensorStore} from '../store'
-import type { Food, FoodPrefChoice } from '../types'
+import type { Food, FoodPrefChoice, ForkListItem } from '../types'
 import {fondueInfo} from "../fondue-math";
 
 const MAX_USER_NAME = 30
@@ -32,28 +32,32 @@ export function createForksRouter(store: ForkStore, sensorStore: SensorStore): R
 
     router.get('/', (req, res) => {
         // The session user's own fork leads the list; the rest follow in id order.
-        const forks = store
+        const forks: ForkListItem[] = store
             .list()
             .map((fork) => {
+                // TODO: temperature should come from the sensor (dip.tempAtInsertC)
+                const dip = sensorStore.getDipState(fork.id, fork.dinnerId);
+                // A fork the sensor has never reported counts as out of the pot.
+                const inPot = dip?.inPot ?? false;
                 if (fork.foodPrefs === null) {
                     return {
                         ...fork,
                         progress: 0,
+                        inPot,
                     };
                 }
                 const prefsForFood = fork.foodPrefs.filter((pref) => pref.foodId === fork.food?.foodId);
-                // TODO: temperature should come from the sensor (dip.tempAtInsertC)
-                const dip = sensorStore.getDipState(fork.id, fork.dinnerId);
                 if (!dip || dip.insertedAt === null || !fork.food) {
                     return {
                         ...fork,
                         progress: 0,
+                        inPot,
                     };
                 }
                 // A removed fork is judged at its removal: progress freezes there.
                 const asOf = dip.removedAt !== null ? new Date(dip.removedAt) : undefined;
                 const forkInfo = fondueInfo(fork.food.foodId, prefsForFood.length > 0 ? prefsForFood[0].prefId : fork.food.prefs[0].id, 90, new Date(dip.insertedAt), asOf)
-                return { ...fork, progress: forkInfo.progress };
+                return { ...fork, progress: forkInfo.progress, inPot };
             });
         forks.sort((a, b) => {
             const own = Number(b.userId === req.userId) - Number(a.userId === req.userId)
