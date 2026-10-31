@@ -22,10 +22,15 @@ function updateFork(fork: Fork) {
     return axios.put("/api/forks", fork)
 }
 
+function leavePot() {
+    return axios.post("/api/forks/leave")
+}
+
 export default {
     getForks,
     getFoods,
     postFork,
     getMyFork,
-    updateFork
+    updateFork,
+    leavePot
 }
