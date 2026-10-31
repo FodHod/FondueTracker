@@ -7,4 +7,7 @@ uv sync
 uv run main.py picam
 
 
+---
+## Testing
+while true; do nc -l 8000; echo; done
 

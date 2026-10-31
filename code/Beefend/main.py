@@ -123,19 +123,23 @@ def camera_frames(source: str):
         finally:
             cap.release()
 
+
 x_min = 300
 x_max = 1400
 y_min = 100
 y_max = 700
+
 def is_in_pot(tag):
-    x, y = tag["x"], tag["y"]
-    in_pot = x_min < x < x_max and y_min < y < y_max
-    return {"id":tag["id"], "in_pot": in_pot}
+    return x_min < tag["x"] < x_max and y_min < tag["y"] < y_max
 
 def create_output(tags):
-    processed_tags = [is_in_pot(tag) for tag in tags]
-    output = {"time": time.time(), "temperature": 27, "tags": processed_tags}
-    return output
+    in_pot_by_id = {}
+    for tag in tags:
+        in_pot_by_id[tag["id"]] = in_pot_by_id.get(tag["id"], False) or is_in_pot(tag)
+
+    processed_tags = [{"id": i, "in_pot": v} for i, v in in_pot_by_id.items()]
+    return {"time": time.time(), "temperature": 27, "tags": processed_tags}
+
 
 def on_tags(tags: list[dict], t_s: float):
     """Called at most every SEND_INTERVAL with the current tags; POSTs them to SEND_URL."""
