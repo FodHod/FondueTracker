@@ -14,9 +14,58 @@
   --color-text-muted: #8A7B70;
   --color-border: #E8DED1;
 
+  --font-body: "Fredoka", sans-serif;
+  --font-heading: "Fredoka", sans-serif;
 }
 
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(1.5deg);
+  }
+}
 
+@keyframes wiggle {
+  0%, 100% {
+    transform: rotate(-2deg) scale(1.02);
+  }
+  50% {
+    transform: rotate(2deg) scale(1.04);
+  }
+}
+
+.animate-float {
+  animation: float-slow 3.5s ease-in-out infinite;
+}
+
+.animate-wiggle {
+  animation: wiggle 0.5s ease-in-out infinite;
+}
+
+.cartoon-card {
+  background-color: #ffffff;
+  border: 3px solid var(--color-text-main);
+  border-radius: 1.25rem;
+  box-shadow: 4px 4px 0px var(--color-text-main);
+}
+
+.cartoon-button {
+  border: 3px solid var(--color-text-main);
+  box-shadow: 4px 4px 0px var(--color-text-main);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cartoon-button:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px var(--color-text-main);
+}
+
+.cartoon-button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0px var(--color-text-main);
+}
 
 @layer base {
   *,
@@ -34,8 +83,17 @@
     min-height: 100vh;
     background-color: var(--color-bg);
     color: var(--color-text-main);
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: var(--font-body);
     line-height: 1.6;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
   }
 
   button,
@@ -60,5 +118,3 @@
     color: white;
   }
 }
-
-
