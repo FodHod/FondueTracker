@@ -189,7 +189,7 @@ def on_tags(tags: list[dict], now: float):
         "temperature": boolean_output["temperature"],
         "tags": smoothed_tags,
     }
-    if tags and now - last_sent >= SEND_INTERVAL:
+    if now - last_sent >= SEND_INTERVAL:
         last_sent = now  # also when the queue is full, so we retry next interval, not next frame
         try:
             send_queue.put_nowait(smoothed_output)
