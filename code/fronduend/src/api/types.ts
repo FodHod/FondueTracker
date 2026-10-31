@@ -1,18 +1,24 @@
+export type FoodPreference = {
+    id: string;
+    name: string;
+}
+
 export type Food = {
     foodId: string;
     foodName: string;
     prefs: FoodPreference[];
 }
 
-export type Fork = {
-    id: string;
-    food: Food;
-    userName: string;
-    progress: number;
-    color: string;
+export type FoodPrefChoice = {
+    foodId: string;
+    prefId: string;
 }
 
-type FoodPreference = {
+export type Fork = {
     id: string;
-    name: string;
+    food: Food | null;
+    userName: string | null;
+    foodPrefs: FoodPrefChoice[] | null;
+    progress: number;
+    color: string;
 }
