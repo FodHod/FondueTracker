@@ -215,9 +215,8 @@ def main():
     frames = detections = 0
     try:
         for frame in camera_frames(CAMERA):
-            # every frame until the circle exists (camera may still be settling), then periodic
             if len(pot_tags) < 3 or frames % POT_CHECK_EVERY == 0:
-                update_pot_tags(frame, frames)
+                update_pot_tags(frame)
             tags = detect(frame)
             now = time.monotonic() - start
             tips = [fork_tip(t) for t in tags]
