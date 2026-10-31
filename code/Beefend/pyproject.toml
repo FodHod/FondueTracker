@@ -1,9 +1,9 @@
 [project]
 name = "Beefend"
 version = "0.1.0"
-description = "Its the backend"
+description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "imageio-ffmpeg>=0.7.0",
     "opencv-python>=5.0.0.93",
