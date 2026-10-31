@@ -40,10 +40,10 @@ describe('fork progress on GET /api/forks', () => {
         expect(res.status).toBe(201)
     }
 
-    /** A dip: the tag left the pot `secondsAgo` and is in it now. */
+    /** A dip that started `secondsAgo`: out one report before, in since then. */
     async function dip(secondsAgo: number) {
-        await report(NOW_MS - secondsAgo * SEC, false)
-        await report(NOW_MS - (secondsAgo - 1) * SEC, true)
+        await report(NOW_MS - (secondsAgo + 1) * SEC, false)
+        await report(NOW_MS - secondsAgo * SEC, true)
     }
 
     /** Claims fork-1 with the helper prefs (beef: rare). */
@@ -89,10 +89,31 @@ describe('fork progress on GET /api/forks', () => {
         expect(await progressOf(agent)).toBe(2)
     })
 
-    it('stays 0 when the log has no in/out flip for the tag', async () => {
-        await report(NOW_MS - 15 * SEC, true)
+    it('counts a tag first seen in the pot as dipped since that report', async () => {
+        await report(NOW_MS - 5 * SEC, true)
+        const agent = await claimForkWithBeef()
+        expect(await progressOf(agent)).toBe(0.5)
+    })
+
+    it('stays 0 for a tag first seen out of the pot', async () => {
+        await report(NOW_MS - 5 * SEC, false)
         const agent = await claimForkWithBeef()
         expect(await progressOf(agent)).toBe(0)
+    })
+
+    it('freezes progress at the value the dip reached when the fork left the pot', async () => {
+        await dip(5)
+        await report(NOW_MS - 2 * SEC, false)
+        const agent = await claimForkWithBeef()
+        expect(await progressOf(agent)).toBe(0.3)
+    })
+
+    it('starts a fresh dip when the fork is dipped again', async () => {
+        await dip(5)
+        await report(NOW_MS - 2 * SEC, false)
+        await report(NOW_MS - SEC, true)
+        const agent = await claimForkWithBeef()
+        expect(await progressOf(agent)).toBe(0.1)
     })
 
     it('stays 0 with no sensor data at all', async () => {
