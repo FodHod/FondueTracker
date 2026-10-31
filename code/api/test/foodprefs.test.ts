@@ -91,10 +91,10 @@ describe('PUT /api/forks foodPrefs merge', () => {
         const agent = request.agent(app)
         await claim(agent, 'fork-1', 'Alice')
 
-        const res = await putPrefs(agent, 'fork-1', [{ foodId: 'beef', prefId: 'well' }])
+        const res = await putPrefs(agent, 'fork-1', [{ foodId: 'beef', prefId: 'well-done' }])
         expect(res.status).toBe(200)
         expect((res.body as Fork).foodPrefs).toEqual(
-            fullFoodPrefs().map((p) => (p.foodId === 'beef' ? { ...p, prefId: 'well' } : p)),
+            fullFoodPrefs().map((p) => (p.foodId === 'beef' ? { ...p, prefId: 'well-done' } : p)),
         )
     })
 
@@ -105,13 +105,13 @@ describe('PUT /api/forks foodPrefs merge', () => {
         const res = await agent.put('/api/forks').send({
             id: 'fork-1',
             food: { foodId: 'beef' },
-            foodPrefs: [{ foodId: 'bread', prefId: 'golden' }],
+            foodPrefs: [{ foodId: 'lamb', prefId: 'medium-rare' }],
         })
         expect(res.status).toBe(200)
         expect((res.body as Fork).food?.foodId).toBe('beef')
-        expect((res.body as Fork).foodPrefs?.find((p) => p.foodId === 'bread')).toEqual({
-            foodId: 'bread',
-            prefId: 'golden',
+        expect((res.body as Fork).foodPrefs?.find((p) => p.foodId === 'lamb')).toEqual({
+            foodId: 'lamb',
+            prefId: 'medium-rare',
         })
     })
 
@@ -140,7 +140,7 @@ describe('PUT /api/forks foodPrefs merge', () => {
         await claim(owner, 'fork-1', 'Alice')
 
         const stranger = request.agent(app)
-        const res = await putPrefs(stranger, 'fork-1', [{ foodId: 'beef', prefId: 'well' }])
+        const res = await putPrefs(stranger, 'fork-1', [{ foodId: 'beef', prefId: 'well-done' }])
         expect(res.status).toBe(403)
     })
 
@@ -149,7 +149,7 @@ describe('PUT /api/forks foodPrefs merge', () => {
         await claim(agent, 'fork-1', 'Alice')
 
         const res = await putPrefs(agent, 'fork-1', [
-            { foodId: 'beef', prefId: 'well' },
+            { foodId: 'beef', prefId: 'well-done' },
             { foodId: 'beef', prefId: 'rare' },
         ])
         expect(res.status).toBe(400)
