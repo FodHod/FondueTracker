@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: fonduetracker
+  name: fonduetracker
+  namespace: fonduetracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fonduetracker
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: fonduetracker
+    spec:
+      containers:
+      - image: ghcr.io/fodhod/fonduetracker:latest
+        name: fonduetracker
+        ports:
+        - name: http
+          containerPort: 8080
+        env:
+        - name: NODE_ENV
+          value: production
+        - name: SENSOR_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: sensor-token
+              key: token
+        resources:
+          limits:
+            cpu: 1
+            memory: 1Gi
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: fonduetracker
+  name: fonduetracker
+  namespace: fonduetracker
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: http
+  selector:
+    app: fonduetracker
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  labels:
+    app: fonduetracker
+  name: fonduetracker
+  namespace: fonduetracker
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: fonduetracker.rovner.ch
+    http:
+      paths:
+      - backend:
+          service:
+            name: fonduetracker
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - fonduetracker.rovner.ch
+    secretName: fonduetracker-tls
