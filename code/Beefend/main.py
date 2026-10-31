@@ -20,8 +20,10 @@ API_TOKEN = os.environ["API_TOKEN"]
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
 OUT_DIR = Path("output")
-SEND_INTERVAL = 1.0  # seconds between on_tags() calls in live mode
-SEND_URL = "http://127.0.0.1:8000/tags"  # e.g. "http://192.168.1.50:8000/tags"; None = only print
+SEND_INTERVAL = 1.0 
+
+SEND_URL = "https://fonduetracker.rovner.ch/api/sensor/default"
+# SEND_URL = "http://127.0.0.1:8000/tags"
 
 DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
@@ -133,7 +135,6 @@ def camera_frames(source: str):
         finally:
             cap.release()
 
-
 x_min = 300
 x_max = 1400
 y_min = 100
@@ -171,7 +172,7 @@ def on_tags(tags: list[dict], now: float):
 
     try:
         if tags and now - last_sent >= SEND_INTERVAL:
-            print(f"{now:7.2f}s  " + "  ".join(f"id={t['id']}@({t['x']:.0f},{t['y']:.0f})" for t in tags))
+            print(f"{now:6.1f}s {len(tags)} tags: {sorted({t['id'] for t in tags})}")
             send_queue.put_nowait(boolean_output)
             last_sent = now
     except queue.Full:
