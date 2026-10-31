@@ -12,7 +12,7 @@ import requests
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
 OUT_DIR = Path("output")
 SEND_INTERVAL = 1.0  # seconds between on_tags() calls in live mode
-SEND_URL = None  # e.g. "http://192.168.1.50:8000/tags"; None = only print
+SEND_URL = "http://127.0.0.1:8000/tags"  # e.g. "http://192.168.1.50:8000/tags"; None = only print
 
 DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
@@ -102,12 +102,14 @@ def camera_frames(source: str):
         from picamera2 import Picamera2  # Pi only: sudo apt install python3-picamera2
         cam = Picamera2()
         cam.configure(cam.create_video_configuration(main={"size": (1280, 720), "format": "RGB888"}))
+        if "AfMode" in cam.camera_controls:  # e.g. Camera Module 3; autofocus is off by default
+            cam.set_controls({"AfMode": 2})  # 2 = continuous
         cam.start()
         try:
             while True:
                 yield cam.capture_array()  # "RGB888" is BGR in memory, as OpenCV expects
         finally:
-            cam.stop()
+            cam.close()
     else:
         cap = cv2.VideoCapture(int(source) if source.isdigit() else source)
         if not cap.isOpened():
