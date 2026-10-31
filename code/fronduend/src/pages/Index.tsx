@@ -1,8 +1,7 @@
-import type {Food, Fork} from "../api/types.ts";
+import type {Fork} from "../api/types.ts";
 import {useEffect, useState} from "react";
 import api from "../api/api.ts";
 import logo from "../assets/images/caquelon-logo.png";
-import MeatSelection from "../components/MeatSelection.tsx";
 
 function getForkQuip(progressPct: number) {
     if (progressPct <= 0) return "Chilling outside the pot ";
@@ -25,22 +24,6 @@ export default function Index() {
         setInterval(updateForkProgress, 1000);
     }, [])
 
-    const selectFood = (fork: Fork) => (food: Food): void => {
-        api.updateFork({
-            ...fork,
-            food: food
-        }).then(console.log)
-    }
-
-    return <>
-        <h1>Hee hee</h1>
-        {forks.map((fork, i) => fork.userName && <div key={fork.id}>
-            <h2 style={{color: fork.color}}>
-                {fork.userName} – {Math.floor(fork.progress * 100)}%
-            </h2>
-            {i == 0 && <MeatSelection select={selectFood(fork)}/>}
-        </div>)}
-    </>;
     const activeForks = forks.filter(fork => fork.userName);
 
     return (
@@ -95,7 +78,8 @@ export default function Index() {
                                     </span>
                                 </div>
 
-                                <div className="mt-3 h-4 w-full overflow-hidden rounded-full border-2 border-text-main bg-bg">
+                                <div
+                                    className="mt-3 h-4 w-full overflow-hidden rounded-full border-2 border-text-main bg-bg">
                                     <div
                                         className="h-full transition-all duration-500 ease-out"
                                         style={{
