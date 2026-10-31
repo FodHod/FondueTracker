@@ -237,7 +237,8 @@ npm run typecheck  # tsc --noEmit
 
 Environment: `PORT` (default 8080), `FORK_COUNT` (default 8), `SENSOR_TOKEN`
 (the sensor endpoint's bearer token; unset = the endpoint rejects everything),
-and `NODE_ENV=production` (adds the `Secure` attribute to the cookie — set in
+`LOG_LEVEL` (the winston logger's level; default `debug`), and
+`NODE_ENV=production` (adds the `Secure` attribute to the cookie — set in
 the k8s deployment, which mounts `SENSOR_TOKEN` from the `sensor-token`
 secret).
 

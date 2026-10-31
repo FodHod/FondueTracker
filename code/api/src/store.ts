@@ -1,4 +1,5 @@
 import { FOOD_CATALOG } from './catalog'
+import { logger } from './logger'
 import type {Fork, Food, SensorMeasurement} from './types'
 
 /** The single dinner this deployment hosts; dinner rooms come later. */
@@ -158,7 +159,7 @@ export function createSensorStore() {
     const dinners = new Map<string, Map<string, DipState>>()
 
     /** Stamps the dip boundary a status change crosses. */
-    function transition(rec: DipState, inPot: boolean, timeMs: number, tempC: number): void {
+    function transition(forkId: string, rec: DipState, inPot: boolean, timeMs: number, tempC: number): void {
         if (rec.inPot === inPot) {
             return
         }
@@ -167,8 +168,10 @@ export function createSensorStore() {
             rec.insertedAt = timeMs
             rec.removedAt = null
             rec.tempAtInsertC = tempC
+            logger.info('fork dipped', { forkId, at: new Date(timeMs).toISOString() })
         } else {
             rec.removedAt = timeMs
+            logger.info('fork removed', { forkId, at: new Date(timeMs).toISOString() })
         }
     }
 
@@ -184,7 +187,7 @@ export function createSensorStore() {
         // A tag absent from a report reads as out of the pot.
         for (const [forkId, rec] of records) {
             const tag = tags.find((t) => `fork-${t.id}` === forkId)
-            transition(rec, tag ? tag.in_pot : false, time, temperature)
+            transition(forkId, rec, tag ? tag.in_pot : false, time, temperature)
         }
 
         // A tag first seen already in the pot counts as inserted at that report.
@@ -199,6 +202,9 @@ export function createSensorStore() {
                 removedAt: null,
                 tempAtInsertC: tag.in_pot ? temperature : null,
             })
+            if (tag.in_pot) {
+                logger.info('fork dipped', { forkId, at: new Date(time).toISOString() })
+            }
         }
     }
 
