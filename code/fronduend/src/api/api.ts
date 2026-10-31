@@ -11,11 +11,16 @@ function getFoods() {
 
 // TODO: was kommt hier zurück?
 function postFork(fork: Fork) {
-    return axios.post("/api/forks", fork)
+    return axios.post("/api/forks", fork);
+}
+
+function getMyFork() {
+    return axios.get<Fork>("/api/forks/mine");
 }
 
 export default {
     getForks,
     getFoods,
-    postFork
+    postFork,
+    getMyFork
 }

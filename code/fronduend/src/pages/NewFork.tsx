@@ -22,6 +22,10 @@ export default function NewFork() {
     const [forks, setForks] = useState<Fork[]>([]);
 
     useEffect(() => {
+        api.getMyFork().then(res => {
+            if (res.data.userName) navigate("/");
+        })
+
         api.getFoods().then(res => {
             setFoods(res.data);
         })
