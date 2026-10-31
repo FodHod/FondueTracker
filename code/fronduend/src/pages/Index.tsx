@@ -4,11 +4,11 @@ import api from "../api/api.ts";
 import logo from "../assets/images/caquelon-logo.png";
 
 function getForkQuip(progressPct: number) {
-    if (progressPct <= 0) return "Chilling outside the pot ";
-    if (progressPct < 30) return "Just dipped! Barely warm ";
-    if (progressPct < 70) return "Getting nice & sizzly... ";
-    if (progressPct < 100) return "Almost ready! Open wide ";
-    return "DONE!!rescue your meat NOW!";
+    if (progressPct <= 0) return "Chilling outside the pot";
+    if (progressPct < 30) return "Just dipped! Barely warm";
+    if (progressPct < 70) return "Getting nice & sizzly...";
+    if (progressPct < 100) return "Almost ready! Open wide";
+    return "Done";
 }
 
 
