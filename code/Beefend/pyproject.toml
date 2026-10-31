@@ -7,4 +7,5 @@ requires-python = ">=3.14"
 dependencies = [
     "imageio-ffmpeg>=0.7.0",
     "opencv-python>=5.0.0.93",
+    "requests>=2.34.2",
 ]
