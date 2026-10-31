@@ -23,11 +23,19 @@ MARKER = "rings"
 RING_UNIT_PX = 8
 SEARCH_SCALE = 0.4
 CAMERA = "picam"
-POT_CHECK_EVERY = 60  # frames between AprilTag scans for the pot markers
+POT_CHECK_EVERY = 60  # frames between AprilTag scans (pot + meat markers)
+# AprilTag IDs on the pot rim; the pot circle is fitted through these only.
+POT_TAG_IDS = (0, 1, 2, 4)
+# AprilTag ID -> meat on the plate next to that tag.
+MEAT_TAGS = {
+    5: "Chicken",
+    6: "Beef",
+    7: "Pork",
+}
 # Fork tip = code center + this many px along the code's START->STOP direction.
 # In the pot when the tip is inside the pot circle. Negative if the strip is wrapped
 # with START toward the tines.
-TIP_OFFSET_PX = 300
+TIP_OFFSET_PX = 345
 
 DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
@@ -97,14 +105,17 @@ def camera_frames(source: str):
         finally:
             cap.release()
 
-pot_tags = {}  # AprilTag id -> last seen center; kept when a scan doesn't see it
+# AprilTag id -> last seen center; kept when a scan doesn't see it
+pot_tags = {}
+meat_tags = {}
 
 
-def update_pot_tags(frame: np.ndarray):
-    seen = detect_apriltag(frame)
-    for t in seen:
-        pot_tags[t["id"]] = t["center"]
-
+def update_apriltags(frame: np.ndarray):
+    for t in detect_apriltag(frame):
+        if t["id"] in POT_TAG_IDS:
+            pot_tags[t["id"]] = t["center"]
+        elif t["id"] in MEAT_TAGS:
+            meat_tags[t["id"]] = t["center"]
 
 
 def pot_circle():
@@ -128,6 +139,15 @@ def draw_pot(image: np.ndarray) -> np.ndarray:
         cv2.putText(image, f"P{tag_id}", (int(x) + 8, int(y) - 8),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 128, 0), 2)
     return image
+
+
+def draw_meats(image: np.ndarray) -> np.ndarray:
+    for tag_id, (x, y) in meat_tags.items():
+        cv2.drawMarker(image, (int(x), int(y)), (0, 200, 255), cv2.MARKER_DIAMOND, 20, 2)
+        cv2.putText(image, f"{tag_id}: {MEAT_TAGS[tag_id]}", (int(x) + 12, int(y) - 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
+    return image
+
 
 def fork_tip(tag: dict) -> np.ndarray:
     """Estimated tip position; AprilTags have no direction, so their center is used."""
@@ -216,7 +236,7 @@ def main():
     try:
         for frame in camera_frames(CAMERA):
             if len(pot_tags) < 3 or frames % POT_CHECK_EVERY == 0:
-                update_pot_tags(frame)
+                update_apriltags(frame)
             tags = detect(frame)
             now = time.monotonic() - start
             tips = [fork_tip(t) for t in tags]
@@ -225,7 +245,8 @@ def main():
 
             detections += len(tags)
             frames += 1
-            cv2.imshow(MARKER, draw_tips(draw(draw_pot(frame.copy()), tags), tags))
+            preview = draw_meats(draw_pot(frame.copy()))
+            cv2.imshow(MARKER, draw_tips(draw(preview, tags), tags))
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
                 break
