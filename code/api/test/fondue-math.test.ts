@@ -42,6 +42,12 @@ describe('fondueInfo progress (beef rare: 10-20 s)', () => {
         expect(fondueInfo('beef', 'rare', 90, started(-5)).progress).toBe(0)
     })
 
+    it('judges a finished dip as of its end time, not now', () => {
+        const start = started(15)
+        const asOf = new Date(start.getTime() + 3 * SEC)
+        expect(fondueInfo('beef', 'rare', 90, start, asOf).progress).toBe(0.3)
+    })
+
     it('scales with the estimate (chicken fully-cooked: 90-120 s)', () => {
         expect(fondueInfo('chicken', 'fully-cooked', 90, started(30)).progress).toBeCloseTo(1 / 3, 6)
         expect(fondueInfo('chicken', 'fully-cooked', 90, started(90)).progress).toBe(1)
