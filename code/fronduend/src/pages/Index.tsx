@@ -24,7 +24,7 @@ export default function Index() {
         setInterval(updateForkProgress, 1000);
     }, [])
 
-    const activeForks = forks.filter(fork => fork.userName);
+    const activeForks = forks.filter(fork => fork.userName && fork.inPot);
 
     return (
         <main className="mx-auto max-w-md px-4 pt-6 pb-8">
@@ -43,7 +43,8 @@ export default function Index() {
                 <div className="cartoon-card p-6 text-center">
                     <p className="text-xl font-bold">The pot is lonely!</p>
                     <p className="mt-1 text-sm text-text-muted">
-                        No forks claimed yet. Tap <strong>Add Fork</strong> below to join the feast!
+                        No forks claimed yet. Tap <strong>Add Fork</strong> below to or put your fork in the pot join
+                        the feast!
                     </p>
                 </div>
             ) : (
