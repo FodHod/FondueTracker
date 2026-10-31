@@ -32,6 +32,7 @@ MEAT_TAGS = {
     6: "Beef",
     7: "Pork",
 }
+MEAT_RADIUS_PX = 100  # fork tip within this of a meat tag -> fork gets that meat
 # Fork tip = code center + this many px along the code's START->STOP direction.
 # In the pot when the tip is inside the pot circle. Negative if the strip is wrapped
 # with START toward the tines.
@@ -108,6 +109,7 @@ def camera_frames(source: str):
 # AprilTag id -> last seen center; kept when a scan doesn't see it
 pot_tags = {}
 meat_tags = {}
+fork_meat = {}  # fork id -> last meat its tip visited; kept until it visits another
 
 
 def update_apriltags(frame: np.ndarray):
@@ -141,8 +143,16 @@ def draw_pot(image: np.ndarray) -> np.ndarray:
     return image
 
 
+def update_fork_meat(tags: list[dict], tips: list[np.ndarray]):
+    for t, tip in zip(tags, tips):
+        for tag_id, center in meat_tags.items():
+            if np.hypot(*(tip - center)) < MEAT_RADIUS_PX:
+                fork_meat[t["id"]] = MEAT_TAGS[tag_id]
+
+
 def draw_meats(image: np.ndarray) -> np.ndarray:
     for tag_id, (x, y) in meat_tags.items():
+        cv2.circle(image, (int(x), int(y)), MEAT_RADIUS_PX, (0, 200, 255), 2)
         cv2.drawMarker(image, (int(x), int(y)), (0, 200, 255), cv2.MARKER_DIAMOND, 20, 2)
         cv2.putText(image, f"{tag_id}: {MEAT_TAGS[tag_id]}", (int(x) + 12, int(y) - 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
@@ -172,6 +182,9 @@ def draw_tips(image: np.ndarray, tags: list[dict]) -> np.ndarray:
         color = (0, 255, 0) if is_in_pot({"x": tip[0], "y": tip[1]}) else (0, 0, 255)
         cv2.line(image, tuple(t["center"].astype(int)), tuple(tip.astype(int)), color, 2)
         cv2.circle(image, tuple(tip.astype(int)), 8, color, -1)
+        if t["id"] in fork_meat:
+            cv2.putText(image, fork_meat[t["id"]], tuple(tip.astype(int) + 12),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
     return image
 
 def create_output(tags):
@@ -202,7 +215,8 @@ def on_tags(tags: list[dict], now: float):
                 in_pot[fork["id"]] = True
     smoothed_tags = []
     for fork_id, fork_in_pot in in_pot.items():
-        smoothed_tags.append({"id": fork_id, "in_pot": fork_in_pot})
+        smoothed_tags.append({"id": fork_id, "in_pot": fork_in_pot,
+                              "meat": fork_meat.get(fork_id)})
 
     smoothed_output = {
         "time": boolean_output["time"],
@@ -240,6 +254,7 @@ def main():
             tags = detect(frame)
             now = time.monotonic() - start
             tips = [fork_tip(t) for t in tags]
+            update_fork_meat(tags, tips)
             on_tags([{"id": t["id"], "x": float(tip[0]), "y": float(tip[1])}
                         for t, tip in zip(tags, tips)], now)
 
