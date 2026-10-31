@@ -147,15 +147,29 @@ def create_output(tags):
     processed_tags = [{"id": i, "in_pot": v} for i, v in in_pot_by_id.items()]
     return {"time": time.time(), "temperature": 27, "tags": processed_tags}
 
+history = deque(maxlen=5)
 
+last_sent = -SEND_INTERVAL
 def on_tags(tags: list[dict], now: float):
-    print(f"{now:7.2f}s  " + "  ".join(f"id={t['id']}@({t['x']:.0f},{t['y']:.0f})" for t in tags))
+    global last_sent
     if SEND_URL is None:
         return
 
+    boolean_output = create_output(tags)
+
+    in_pot={}
+    history.append(boolean_output["tags"])
+    for output in history:
+        for fork in output:
+            if fork["id"] not in in_pot:
+                in_pot[fork["id"]] = fork["in_pot"]
+            elif fork["in_pot"]:
+                in_pot[fork["id"]] = True
+
     try:
         if tags and now - last_sent >= SEND_INTERVAL:
-            send_queue.put_nowait(create_output(tags))
+            print(f"{now:7.2f}s  " + "  ".join(f"id={t['id']}@({t['x']:.0f},{t['y']:.0f})" for t in tags))
+            send_queue.put_nowait(boolean_output)
             last_sent = now
     except queue.Full:
         pass 
@@ -175,7 +189,6 @@ threading.Thread(target=sender, daemon=True).start()
 def process_live(source: str):
     """Show a live preview and pass detections to on_tags() until q or Ctrl+C."""
     start = time.monotonic()
-    last_sent = -SEND_INTERVAL
     frames = detections = 0
     try:
         for frame in camera_frames(source):
