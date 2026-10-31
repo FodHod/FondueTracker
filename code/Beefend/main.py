@@ -15,15 +15,29 @@ from collections import deque
 
 from dotenv import load_dotenv
 import os
+
+import tracker as rings
+
 load_dotenv()
 API_TOKEN = os.environ["API_TOKEN"]
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
 OUT_DIR = Path("output")
-SEND_INTERVAL = 1.0 
+SEND_INTERVAL = 1.0
 
 SEND_URL = "https://fonduetracker.rovner.ch/api/sensor/default"
 # SEND_URL = "http://127.0.0.1:8000/tags"
+
+# Marker to track: "rings" (ring barcode, tracker.py) or "apriltag".
+MARKER = "rings"
+# Ring unit u in full-res pixels at your camera distance: run `python tracker.py frame.jpg`
+# on a captured frame and copy the u it prints.
+RING_UNIT_PX = 8
+# Low-res search pass as a fraction of the frame (0.4 = 512x288 from 1280x720); reading is
+# always full res. Lower = faster; keep RING_UNIT_PX * SEARCH_SCALE >= 3.
+SEARCH_SCALE = 0.4
+# Source when run without arguments: "picam", a webcam index like "0", or a stream URL.
+CAMERA = "picam"
 
 DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
@@ -32,7 +46,7 @@ DETECTOR = cv2.aruco.ArucoDetector(
 
 send_queue = queue.Queue(maxsize=1)
 
-def detect(image: np.ndarray) -> list[dict]:
+def detect_apriltag(image: np.ndarray) -> list[dict]:
     """Return [{id, center, corners}] in pixel coordinates."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
     corners, ids, _ = DETECTOR.detectMarkers(gray)
@@ -44,7 +58,7 @@ def detect(image: np.ndarray) -> list[dict]:
     ]
 
 
-def draw(image: np.ndarray, tags: list[dict]) -> np.ndarray:
+def draw_apriltag(image: np.ndarray, tags: list[dict]) -> np.ndarray:
     out = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR) if image.ndim == 2 else image.copy()
     for t in tags:
         cv2.polylines(out, [t["corners"].astype(int)], True, (0, 255, 0), 2)
@@ -55,13 +69,25 @@ def draw(image: np.ndarray, tags: list[dict]) -> np.ndarray:
     return out
 
 
+def detect(image: np.ndarray) -> list[dict]:
+    """Both detectors return [{id, center, ...}]; only draw() needs the rest."""
+    if MARKER == "rings":
+        return rings.detect(image, unit_px=RING_UNIT_PX, search_scale=SEARCH_SCALE)
+    return detect_apriltag(image)
+
+
+def draw(image: np.ndarray, tags: list[dict]) -> np.ndarray:
+    return rings.draw(image, tags) if MARKER == "rings" else draw_apriltag(image, tags)
+
+
 def process_image(path: Path):
     image = cv2.imread(str(path))
     if image is None:
         print(f"{path}: could not read")
         return
+    t0 = time.perf_counter()
     tags = detect(image)
-    print(f"{path}: {len(tags)} tag(s)")
+    print(f"{path}: {len(tags)} tag(s) in {1000 * (time.perf_counter() - t0):.0f} ms")
     for t in tags:
         cx, cy = t["center"]
         print(f"  id={t['id']:<3} center=({cx:.1f}, {cy:.1f})")
@@ -176,7 +202,7 @@ def on_tags(tags: list[dict], now: float):
             send_queue.put_nowait(boolean_output)
             last_sent = now
     except queue.Full:
-        pass 
+        pass
 
 
 def sender():
@@ -203,7 +229,7 @@ def process_live(source: str):
 
             detections += len(tags)
             frames += 1
-            cv2.imshow("apriltags", draw(frame, tags))
+            cv2.imshow(MARKER, draw(frame, tags))
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
     except KeyboardInterrupt:
@@ -216,7 +242,7 @@ def process_live(source: str):
 
 def main():
     OUT_DIR.mkdir(exist_ok=True)
-    for source in sys.argv[1:] or sorted(str(p) for p in Path("images").glob("*.png")):
+    for source in sys.argv[1:] or [CAMERA]:
         if source == "picam" or source.isdigit() or "://" in source:
             process_live(source)
         elif Path(source).suffix.lower() in VIDEO_EXTS:
