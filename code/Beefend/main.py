@@ -23,14 +23,13 @@ MARKER = "rings"
 RING_UNIT_PX = 8
 SEARCH_SCALE = 0.4
 CAMERA = "picam"
-POT_CHECK_EVERY = 60  # frames between AprilTag scans (pot + meat markers)
+POT_CHECK_EVERY = 60
 # AprilTag IDs on the pot rim; the pot circle is fitted through these only.
 POT_TAG_IDS = (0, 1, 2, 4)
 # AprilTag ID -> meat on the plate next to that tag.
 MEAT_TAGS = {
     5: "Chicken",
-    6: "Beef",
-    7: "Pork",
+    3: "Beef",
 }
 MEAT_RADIUS_PX = 70  # fork tip within this of a meat tag -> fork gets that meat
 # Fork tip = code center + this many px along the code's START->STOP direction.
