@@ -142,7 +142,7 @@ def is_in_pot(tag):
     if circle is None:
         return False
     (cx, cy), r = circle
-    return np.hypot(tag["x"] - cx, tag["y"] - cy) < r
+    return bool(np.hypot(tag["x"] - cx, tag["y"] - cy) < r)  # plain bool: numpy's isn't JSON
 
 
 def draw_tips(image: np.ndarray, tags: list[dict]) -> np.ndarray:
@@ -190,7 +190,7 @@ def on_tags(tags: list[dict], now: float):
         "tags": smoothed_tags,
     }
     if tags and now - last_sent >= SEND_INTERVAL:
-        last_sent = now
+        last_sent = now  # also when the queue is full, so we retry next interval, not next frame
         try:
             send_queue.put_nowait(smoothed_output)
             print(f"{now:6.1f}s {len(tags)} smoothed tags: {sorted({t['id'] for t in smoothed_tags})}")
@@ -204,8 +204,8 @@ def sender():
         try:
             r = requests.post(SEND_URL, json=payload, headers={"Authorization": f"Bearer {API_TOKEN}"},timeout=2)
             print(f"         -> {r.status_code}")
-        except requests.RequestException as e:
-            print(f"         -> send failed: {e}")
+        except Exception as e:  # anything, so one bad payload can't kill this thread
+            print(f"         -> send failed: {e!r}")
 
 
 def main():

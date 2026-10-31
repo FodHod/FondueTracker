@@ -24,6 +24,7 @@ export default function NewFork() {
     useEffect(() => {
         api.getMyFork().then(res => {
             if (res.data.userName) navigate("/");
+        }).catch(() => {
         })
 
         api.getFoods().then(res => {
