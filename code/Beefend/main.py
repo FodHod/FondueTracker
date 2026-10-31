@@ -9,16 +9,28 @@ import imageio_ffmpeg
 import numpy as np
 import requests
 
+import threading
+import queue
+from collections import deque
+
+from dotenv import load_dotenv
+import os
+load_dotenv()
+API_TOKEN = os.environ["API_TOKEN"]
+
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
 OUT_DIR = Path("output")
-SEND_INTERVAL = 1.0  # seconds between on_tags() calls in live mode
-SEND_URL = "http://127.0.0.1:8000/tags"  # e.g. "http://192.168.1.50:8000/tags"; None = only print
+SEND_INTERVAL = 1.0 
+
+SEND_URL = "https://fonduetracker.rovner.ch/api/sensor/default"
+# SEND_URL = "http://127.0.0.1:8000/tags"
 
 DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
     cv2.aruco.DetectorParameters(),
 )
 
+send_queue = queue.Queue(maxsize=1)
 
 def detect(image: np.ndarray) -> list[dict]:
     """Return [{id, center, corners}] in pixel coordinates."""
@@ -123,7 +135,6 @@ def camera_frames(source: str):
         finally:
             cap.release()
 
-
 x_min = 300
 x_max = 1400
 y_min = 100
@@ -140,33 +151,56 @@ def create_output(tags):
     processed_tags = [{"id": i, "in_pot": v} for i, v in in_pot_by_id.items()]
     return {"time": time.time(), "temperature": 27, "tags": processed_tags}
 
+history = deque(maxlen=5)
 
-def on_tags(tags: list[dict], t_s: float):
-    """Called at most every SEND_INTERVAL with the current tags; POSTs them to SEND_URL."""
-    print(f"{t_s:7.2f}s  " + "  ".join(f"id={t['id']}@({t['x']:.0f},{t['y']:.0f})" for t in tags))
+last_sent = -SEND_INTERVAL
+def on_tags(tags: list[dict], now: float):
+    global last_sent
     if SEND_URL is None:
         return
-    try:
-        # Short timeout: this runs inside the camera loop, so a slow server stalls the preview.
-        r = requests.post(SEND_URL, json=create_output(tags), timeout=0.5)
-        print(f"         -> {r.status_code}")
-    except requests.RequestException as e:
-        print(f"         -> send failed: {e}")
 
+    boolean_output = create_output(tags)
+
+    in_pot={}
+    history.append(boolean_output["tags"])
+    for output in history:
+        for fork in output:
+            if fork["id"] not in in_pot:
+                in_pot[fork["id"]] = fork["in_pot"]
+            elif fork["in_pot"]:
+                in_pot[fork["id"]] = True
+
+    try:
+        if tags and now - last_sent >= SEND_INTERVAL:
+            print(f"{now:6.1f}s {len(tags)} tags: {sorted({t['id'] for t in tags})}")
+            send_queue.put_nowait(boolean_output)
+            last_sent = now
+    except queue.Full:
+        pass 
+
+
+def sender():
+    while True:
+        payload = send_queue.get()
+        try:
+            r = requests.post(SEND_URL, json=payload, headers={"Authorization": f"Bearer {API_TOKEN}"},timeout=2)
+            print(f"         -> {r.status_code}")
+        except requests.RequestException as e:
+            print(f"         -> send failed: {e}")
+
+threading.Thread(target=sender, daemon=True).start()
 
 def process_live(source: str):
     """Show a live preview and pass detections to on_tags() until q or Ctrl+C."""
     start = time.monotonic()
-    last_sent = -SEND_INTERVAL
     frames = detections = 0
     try:
         for frame in camera_frames(source):
             tags = detect(frame)
             now = time.monotonic() - start
-            if tags and now - last_sent >= SEND_INTERVAL:
-                on_tags([{"id": t["id"], "x": float(t["center"][0]), "y": float(t["center"][1])}
-                         for t in tags], now)
-                last_sent = now
+            on_tags([{"id": t["id"], "x": float(t["center"][0]), "y": float(t["center"][1])}
+                        for t in tags], now)
+
             detections += len(tags)
             frames += 1
             cv2.imshow("apriltags", draw(frame, tags))
