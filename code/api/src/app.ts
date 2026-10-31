@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
+import morgan from 'morgan'
 import { sessionMiddleware } from './session'
 import { createForkStore, createSensorStore } from './store'
 import { createForksRouter } from './routes/forks'
@@ -11,6 +12,14 @@ const publicDir = fileURLToPath(new URL('../public', import.meta.url))
 
 export function createApp() {
     const app = express()
+
+    // Request logging: terse colored lines in dev, combined format in prod.
+    // Health probes are skipped so the Docker HEALTHCHECK does not spam.
+    app.use(
+        morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev', {
+            skip: (req) => req.path === '/healthz',
+        }),
+    )
 
     // Request parsers: handlers see the same req.body for JSON and form payloads.
     app.use(express.json())
