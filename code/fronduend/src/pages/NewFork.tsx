@@ -63,10 +63,13 @@ export default function NewFork() {
             food: null,
             progress: 0,
             color: "",
+            inPot: false,
         }).then(() => {
             navigate("/")
         })
     }
+
+    const availableForks = forks.filter(fork => !fork.userName);
 
     return (
         <main className="mx-auto max-w-md px-4 pt-6 pb-8">
@@ -110,7 +113,7 @@ export default function NewFork() {
                                                     key={pref.id}
                                                     className={`cursor-pointer rounded-full border-2 border-text-main px-3 py-1 text-xs font-semibold transition-all ${
                                                         isSelected
-                                                            ? "bg-tertiary shadow-[2px_2px_0px_#3D2D23] -translate-y-0.5"
+                                                            ? "bg-secondary shadow-[2px_2px_0px_#3D2D23] -translate-y-0.5"
                                                             : "bg-white opacity-80 hover:opacity-100"
                                                     }`}
                                                 >
@@ -118,6 +121,7 @@ export default function NewFork() {
                                                         type={"radio"}
                                                         name={food.foodId}
                                                         value={pref.id}
+                                                        required
                                                         onChange={changeFoodPref}
                                                         className="sr-only"
                                                     />
@@ -137,14 +141,14 @@ export default function NewFork() {
                         Pick your fork
                     </h2>
                     <div className="grid grid-cols-2 gap-2.5">
-                        {forks.map(fork => {
+                        {availableForks.map(fork => {
                             const isSelected = form.forkId === fork.id;
                             return (
                                 <label
                                     key={fork.id}
                                     className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-text-main px-3 py-2 text-sm font-semibold transition-all ${
                                         isSelected
-                                            ? "bg-secondary shadow-[3px_3px_0px_#3D2D23] -translate-y-0.5"
+                                            ? "bg-primary shadow-[3px_3px_0px_#3D2D23] -translate-y-0.5"
                                             : "bg-bg hover:bg-white"
                                     }`}
                                 >
@@ -152,6 +156,7 @@ export default function NewFork() {
                                         type={"radio"}
                                         name={"fork"}
                                         value={fork.id}
+                                        required
                                         onChange={e => setForm(prev => ({
                                             ...prev,
                                             forkId: e.target.value
@@ -172,7 +177,7 @@ export default function NewFork() {
 
                 <button
                     type={"submit"}
-                    className="cartoon-button w-full rounded-2xl bg-primary py-3 text-lg font-bold text-text-main"
+                    className="cartoon-button w-full rounded-2xl bg-tertiary py-3 text-lg font-bold text-text-main"
                 >
                     Dive Into The Pot!
                 </button>
