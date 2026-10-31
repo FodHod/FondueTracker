@@ -26,10 +26,10 @@ CAMERA = "picam"
 POT_CHECK_EVERY = 60
 # AprilTag IDs on the pot rim; the pot circle is fitted through these only.
 POT_TAG_IDS = (0, 1, 2, 4)
-# AprilTag ID -> meat on the plate next to that tag.
+# AprilTag ID -> (meat on the plate next to that tag, color in the preview as RGB).
 MEAT_TAGS = {
-    5: "Chicken",
-    3: "Beef",
+    5: ("chicken", (255, 210, 0)),
+    3: ("beef", (220, 30, 30)),
 }
 MEAT_RADIUS_PX = 60  # fork tip within this of a meat tag -> fork gets that meat
 # Fork tip = code center + this many px along the code's START->STOP direction.
@@ -108,7 +108,7 @@ def camera_frames(source: str):
 # AprilTag id -> last seen center; kept when a scan doesn't see it
 pot_tags = {}
 meat_tags = {}
-fork_meat = {}  # fork id -> last meat its tip visited; kept until it visits another
+fork_meat = {}  # fork id -> meat tag id its tip last visited; kept until it visits another
 
 
 def update_apriltags(frame: np.ndarray):
@@ -146,15 +146,20 @@ def update_fork_meat(tags: list[dict], tips: list[np.ndarray]):
     for t, tip in zip(tags, tips):
         for tag_id, center in meat_tags.items():
             if np.hypot(*(tip - center)) < MEAT_RADIUS_PX:
-                fork_meat[t["id"]] = MEAT_TAGS[tag_id]
+                fork_meat[t["id"]] = tag_id
+
+
+def meat_color(tag_id: int) -> tuple:
+    return MEAT_TAGS[tag_id][1][::-1]  # RGB -> OpenCV's BGR
 
 
 def draw_meats(image: np.ndarray) -> np.ndarray:
     for tag_id, (x, y) in meat_tags.items():
-        cv2.circle(image, (int(x), int(y)), MEAT_RADIUS_PX, (0, 200, 255), 2)
-        cv2.drawMarker(image, (int(x), int(y)), (0, 200, 255), cv2.MARKER_DIAMOND, 20, 2)
-        cv2.putText(image, f"{tag_id}: {MEAT_TAGS[tag_id]}", (int(x) + 12, int(y) - 12),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
+        name, color = MEAT_TAGS[tag_id][0], meat_color(tag_id)
+        cv2.circle(image, (int(x), int(y)), MEAT_RADIUS_PX, color, 2)
+        cv2.drawMarker(image, (int(x), int(y)), color, cv2.MARKER_DIAMOND, 20, 2)
+        cv2.putText(image, f"{tag_id}: {name}", (int(x) + 12, int(y) - 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
     return image
 
 
@@ -182,8 +187,9 @@ def draw_tips(image: np.ndarray, tags: list[dict]) -> np.ndarray:
         cv2.line(image, tuple(t["center"].astype(int)), tuple(tip.astype(int)), color, 2)
         cv2.circle(image, tuple(tip.astype(int)), 8, color, -1)
         if t["id"] in fork_meat:
-            cv2.putText(image, fork_meat[t["id"]], tuple(tip.astype(int) + 12),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
+            meat = fork_meat[t["id"]]
+            cv2.putText(image, MEAT_TAGS[meat][0], tuple(tip.astype(int) + 12),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, meat_color(meat), 2)
     return image
 
 def create_output(tags):
@@ -215,7 +221,7 @@ def on_tags(tags: list[dict], now: float):
     smoothed_tags = []
     for fork_id, fork_in_pot in in_pot.items():
         smoothed_tags.append({"id": fork_id, "in_pot": fork_in_pot,
-                              "meat": fork_meat.get(fork_id)})
+                              "meat": MEAT_TAGS[fork_meat[fork_id]][0] if fork_id in fork_meat else None})
 
     smoothed_output = {
         "time": boolean_output["time"],
