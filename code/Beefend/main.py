@@ -9,6 +9,11 @@ import imageio_ffmpeg
 import numpy as np
 import requests
 
+import threading
+import queue
+
+
+
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
 OUT_DIR = Path("output")
 SEND_INTERVAL = 1.0  # seconds between on_tags() calls in live mode
@@ -19,6 +24,7 @@ DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.DetectorParameters(),
 )
 
+send_queue = queue.Queue(maxsize=1)
 
 def detect(image: np.ndarray) -> list[dict]:
     """Return [{id, center, corners}] in pixel coordinates."""
@@ -146,13 +152,23 @@ def on_tags(tags: list[dict], t_s: float):
     print(f"{t_s:7.2f}s  " + "  ".join(f"id={t['id']}@({t['x']:.0f},{t['y']:.0f})" for t in tags))
     if SEND_URL is None:
         return
-    try:
-        # Short timeout: this runs inside the camera loop, so a slow server stalls the preview.
-        r = requests.post(SEND_URL, json=create_output(tags), timeout=0.5)
-        print(f"         -> {r.status_code}")
-    except requests.RequestException as e:
-        print(f"         -> send failed: {e}")
 
+    try:
+        send_queue.put_nowait(create_output(tags))
+    except queue.Full:
+        pass 
+
+
+def sender():
+    while True:
+        payload = send_queue.get()
+        try:
+            r = requests.post(SEND_URL, json=payload, timeout=2)
+            print(f"         -> {r.status_code}")
+        except requests.RequestException as e:
+            print(f"         -> send failed: {e}")
+
+threading.Thread(target=sender, daemon=True).start()
 
 def process_live(source: str):
     """Show a live preview and pass detections to on_tags() until q or Ctrl+C."""
