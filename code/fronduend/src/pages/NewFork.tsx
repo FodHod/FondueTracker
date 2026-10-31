@@ -2,6 +2,7 @@ import * as React from "react";
 import {useEffect, useState} from "react";
 import type {Food, FoodPrefChoice, Fork} from "../api/types.ts";
 import api from "../api/api.ts";
+import {useNavigate} from "react-router-dom";
 
 type NewForkForm = {
     forkId: string;
@@ -10,7 +11,7 @@ type NewForkForm = {
 }
 
 export default function NewFork() {
-
+    const navigate = useNavigate();
     const [form, setForm] = useState<NewForkForm>({
         forkId: "",
         userName: "",
@@ -57,7 +58,9 @@ export default function NewFork() {
             food: undefined,
             progress: 0,
             color: "",
-        }).then(console.log)
+        }).then(() => {
+            navigate("/")
+        })
     }
 
     return <>
