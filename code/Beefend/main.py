@@ -100,13 +100,11 @@ def camera_frames(source: str):
 pot_tags = {}  # AprilTag id -> last seen center; kept when a scan doesn't see it
 
 
-def update_pot_tags(frame: np.ndarray, frame_no: int, verbose: bool):
+def update_pot_tags(frame: np.ndarray):
     seen = detect_apriltag(frame)
     for t in seen:
         pot_tags[t["id"]] = t["center"]
-    if verbose or seen:
-        print(f"pot scan frame {frame_no}: saw {sorted(t['id'] for t in seen)}, "
-              f"known {sorted(pot_tags)}")
+
 
 
 def pot_circle():
@@ -219,7 +217,7 @@ def main():
         for frame in camera_frames(CAMERA):
             # every frame until the circle exists (camera may still be settling), then periodic
             if len(pot_tags) < 3 or frames % POT_CHECK_EVERY == 0:
-                update_pot_tags(frame, frames, verbose=frames % POT_CHECK_EVERY == 0)
+                update_pot_tags(frame, frames)
             tags = detect(frame)
             now = time.monotonic() - start
             tips = [fork_tip(t) for t in tags]
@@ -239,8 +237,7 @@ def main():
         pass
     cv2.destroyAllWindows()
     elapsed = time.monotonic() - start
-    print(f"\n{CAMERA}: {frames} frames in {elapsed:.1f}s ({frames / elapsed:.1f} fps), "
-          f"{detections} detections")
+
 
 
 if __name__ == "__main__":
