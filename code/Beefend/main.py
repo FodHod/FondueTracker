@@ -13,7 +13,10 @@ import threading
 import queue
 from collections import deque
 
-
+from dotenv import load_dotenv
+import os
+load_dotenv()
+API_TOKEN = os.environ["API_TOKEN"]
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
 OUT_DIR = Path("output")
@@ -179,7 +182,7 @@ def sender():
     while True:
         payload = send_queue.get()
         try:
-            r = requests.post(SEND_URL, json=payload, timeout=2)
+            r = requests.post(SEND_URL, json=payload, headers={"Authorization": f"Bearer {API_TOKEN}"},timeout=2)
             print(f"         -> {r.status_code}")
         except requests.RequestException as e:
             print(f"         -> send failed: {e}")
