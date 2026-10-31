@@ -1,28 +1,19 @@
-import csv
-import sys
-import time
-from collections import Counter
-from pathlib import Path
-
-import cv2
-import imageio_ffmpeg
-import numpy as np
-import requests
-
-import threading
+import os
 import queue
+import threading
+import time
 from collections import deque
 
+import cv2
+import numpy as np
+import requests
 from dotenv import load_dotenv
-import os
 
 import tracker as rings
 
 load_dotenv()
 API_TOKEN = os.environ["API_TOKEN"]
 
-VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
-OUT_DIR = Path("output")
 SEND_INTERVAL = 1.0
 
 SEND_URL = "https://fonduetracker.rovner.ch/api/sensor/default"
@@ -36,7 +27,7 @@ RING_UNIT_PX = 8
 # Low-res search pass as a fraction of the frame (0.4 = 512x288 from 1280x720); reading is
 # always full res. Lower = faster; keep RING_UNIT_PX * SEARCH_SCALE >= 3.
 SEARCH_SCALE = 0.4
-# Source when run without arguments: "picam", a webcam index like "0", or a stream URL.
+# "picam", a webcam index like "0", or a stream URL.
 CAMERA = "picam"
 
 DETECTOR = cv2.aruco.ArucoDetector(
@@ -78,60 +69,6 @@ def detect(image: np.ndarray) -> list[dict]:
 
 def draw(image: np.ndarray, tags: list[dict]) -> np.ndarray:
     return rings.draw(image, tags) if MARKER == "rings" else draw_apriltag(image, tags)
-
-
-def process_image(path: Path):
-    image = cv2.imread(str(path))
-    if image is None:
-        print(f"{path}: could not read")
-        return
-    t0 = time.perf_counter()
-    tags = detect(image)
-    print(f"{path}: {len(tags)} tag(s) in {1000 * (time.perf_counter() - t0):.0f} ms")
-    for t in tags:
-        cx, cy = t["center"]
-        print(f"  id={t['id']:<3} center=({cx:.1f}, {cy:.1f})")
-    cv2.imwrite(str(OUT_DIR / path.name), draw(image, tags))
-
-
-def process_video(path: Path):
-    """Annotate every frame into output/<name>.mp4 and log detections to output/<name>.csv."""
-    cap = cv2.VideoCapture(str(path))
-    if not cap.isOpened():
-        print(f"{path}: could not open")
-        return
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-    # H.264 via ffmpeg: much smaller than OpenCV's built-in mp4v.
-    writer = imageio_ffmpeg.write_frames(
-        str(OUT_DIR / f"{path.stem}.mp4"), size, fps=fps, pix_fmt_in="bgr24",
-        codec="libx264", quality=None, output_params=["-crf", "28", "-preset", "fast"],
-    )
-    writer.send(None)
-
-    frames = frames_with_tags = 0
-    ids = Counter()
-    with open(OUT_DIR / f"{path.stem}.csv", "w", newline="") as f:
-        log = csv.writer(f)
-        log.writerow(["frame", "time_s", "id", "cx", "cy"])
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
-            tags = detect(frame)
-            for t in tags:
-                cx, cy = t["center"]
-                log.writerow([frames, f"{frames / fps:.3f}", t["id"], f"{cx:.1f}", f"{cy:.1f}"])
-            ids.update(t["id"] for t in tags)
-            frames_with_tags += bool(tags)
-            writer.send(draw(frame, tags))
-            frames += 1
-
-    cap.release()
-    writer.close()
-    print(f"{path}: {frames} frames, {frames_with_tags} with tags, "
-          f"{ids.total()} detections")
-    print("  per id: " + ", ".join(f"{i}={n}" for i, n in sorted(ids.items())))
 
 
 def camera_frames(source: str):
@@ -177,7 +114,7 @@ def create_output(tags):
     processed_tags = [{"id": i, "in_pot": v} for i, v in in_pot_by_id.items()]
     return {"time": time.time(), "temperature": 27, "tags": processed_tags}
 
-history = deque(maxlen=5)
+history = deque(maxlen=30)
 
 last_sent = -SEND_INTERVAL
 def on_tags(tags: list[dict], now: float):
@@ -195,11 +132,19 @@ def on_tags(tags: list[dict], now: float):
                 in_pot[fork["id"]] = fork["in_pot"]
             elif fork["in_pot"]:
                 in_pot[fork["id"]] = True
+    smoothed_tags = []
+    for fork_id, fork_in_pot in in_pot.items():
+        smoothed_tags.append({"id": fork_id, "in_pot": fork_in_pot})
 
+    smoothed_output = {
+        "time": boolean_output["time"],
+        "temperature": boolean_output["temperature"],
+        "tags": smoothed_tags,
+    }
     try:
         if tags and now - last_sent >= SEND_INTERVAL:
             print(f"{now:6.1f}s {len(tags)} tags: {sorted({t['id'] for t in tags})}")
-            send_queue.put_nowait(boolean_output)
+            send_queue.put_nowait(smoothed_output)
             last_sent = now
     except queue.Full:
         pass
@@ -214,14 +159,14 @@ def sender():
         except requests.RequestException as e:
             print(f"         -> send failed: {e}")
 
-threading.Thread(target=sender, daemon=True).start()
 
-def process_live(source: str):
+def main():
     """Show a live preview and pass detections to on_tags() until q or Ctrl+C."""
+    threading.Thread(target=sender, daemon=True).start()
     start = time.monotonic()
     frames = detections = 0
     try:
-        for frame in camera_frames(source):
+        for frame in camera_frames(CAMERA):
             tags = detect(frame)
             now = time.monotonic() - start
             on_tags([{"id": t["id"], "x": float(t["center"][0]), "y": float(t["center"][1])}
@@ -236,19 +181,8 @@ def process_live(source: str):
         pass
     cv2.destroyAllWindows()
     elapsed = time.monotonic() - start
-    print(f"\n{source}: {frames} frames in {elapsed:.1f}s ({frames / elapsed:.1f} fps), "
+    print(f"\n{CAMERA}: {frames} frames in {elapsed:.1f}s ({frames / elapsed:.1f} fps), "
           f"{detections} detections")
-
-
-def main():
-    OUT_DIR.mkdir(exist_ok=True)
-    for source in sys.argv[1:] or [CAMERA]:
-        if source == "picam" or source.isdigit() or "://" in source:
-            process_live(source)
-        elif Path(source).suffix.lower() in VIDEO_EXTS:
-            process_video(Path(source))
-        else:
-            process_image(Path(source))
 
 
 if __name__ == "__main__":

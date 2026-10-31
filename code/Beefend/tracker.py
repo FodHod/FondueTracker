@@ -1,21 +1,3 @@
-"""Ring-code decoder for round shafts (fondue forks): IDs 1-7, readable at any rotation.
-
-Code layout along the shaft, in units u (all bands are full rings):
-
-    quiet(2u white) | START 3u black | 1u white | b1 | 1u | b2 | 1u | b3 | 1u | P | 1u | STOP 1u black | quiet(2u)
-
-    bit band: 1u black = 0, 2u black = 1;  b1..b3 = ID (MSB first), P = even parity.
-
-Decoding measures edge-to-same-edge distances (leading->leading, trailing->trailing), which
-cancel blur and threshold bias, and normalises by the START and STOP pitches, which cancels
-scale. START is only at one end, so the read direction (and which way the fork points) is known.
-
-    python tracker.py gen 5 [unit_mm] [circumference_mm] [dpi]   -> ring_5.png to print and wrap
-    python tracker.py test                                        -> synthetic robustness test
-    python tracker.py img1.jpg img2.jpg                           -> print IDs, save annotated output/
-    python tracker.py live [0|url]                                -> webcam / stream
-"""
-
 import sys
 import time
 from pathlib import Path
