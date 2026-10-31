@@ -189,13 +189,13 @@ def on_tags(tags: list[dict], now: float):
         "temperature": boolean_output["temperature"],
         "tags": smoothed_tags,
     }
-    try:
-        if tags and now - last_sent >= SEND_INTERVAL:
-            print(f"{now:6.1f}s {len(tags)} smoothed tags: {sorted({t['id'] for t in smoothed_tags})}")
+    if tags and now - last_sent >= SEND_INTERVAL:
+        last_sent = now
+        try:
             send_queue.put_nowait(smoothed_output)
-            last_sent = now
-    except queue.Full:
-        pass
+            print(f"{now:6.1f}s {len(tags)} smoothed tags: {sorted({t['id'] for t in smoothed_tags})}")
+        except queue.Full:
+            print(f"{now:6.1f}s sender still busy with the previous request, skipped")
 
 
 def sender():
