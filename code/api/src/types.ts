@@ -38,6 +38,7 @@ export type ForkListItem = Fork & {
 export type ForkState = {
     id: number;
     in_pot: boolean;
+    food_id: string | null;
 }
 
 export type SensorMeasurement = {

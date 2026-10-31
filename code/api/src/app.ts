@@ -32,14 +32,14 @@ export function createApp() {
     app.use('/api', sessionMiddleware)
 
     // The dinner: a freshly seeded pool of forks and the food catalog.
-    const store = createForkStore()
+    const forkStore = createForkStore()
     const sensorStore = createSensorStore();
-    app.use('/api/forks', createForksRouter(store, sensorStore));
+    app.use('/api/forks', createForksRouter(forkStore, sensorStore));
     app.use('/api/foods', createFoodsRouter())
 
     // The pot sensor's report endpoint, keyed by the dinnerId in its path.
     // The bearer token comes from the environment; unset means fail-closed.
-    app.use('/api/sensor', createSensorRouter(sensorStore, process.env.SENSOR_TOKEN))
+    app.use('/api/sensor', createSensorRouter(sensorStore, forkStore, process.env.SENSOR_TOKEN))
 
     // Liveness endpoint for the Docker HEALTHCHECK and k8s probes.
     app.get('/healthz', (_req, res) => {
