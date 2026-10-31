@@ -111,6 +111,25 @@ export function createForkStore() {
         return serialize(fork)
     }
 
+    /**
+     * Releases the user's fork back to the pool, emptied of its food; null
+     * when they hold none. The holder's standing preferences survive the
+     * release — they ride only on a held fork and are re-declared at the
+     * next claim anyway.
+     */
+    function release(userId: string): Fork | null {
+        for (const fork of forks.values()) {
+            if (fork.userId === userId) {
+                fork.userId = null
+                fork.userName = null
+                fork.food = null
+                fork.progress = 0
+                return serialize(fork)
+            }
+        }
+        return null
+    }
+
     /** Sets or clears the fork's food; null when the fork does not exist. */
     function setFood(id: string, food: Food | null): Fork | null {
         const fork = forks.get(id)
@@ -131,7 +150,7 @@ export function createForkStore() {
         prefs.set(foodId, prefId)
     }
 
-    return { list, get, forUser, holdsFork, assign, setFood, setPref }
+    return { list, get, forUser, holdsFork, assign, release, setFood, setPref }
 }
 
 /** The materialized dip state of one fork in one dinner. */

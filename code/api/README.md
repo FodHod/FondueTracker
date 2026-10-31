@@ -134,8 +134,25 @@ neither is rejected.
 - `400` missing `id`, malformed `food`, unknown `foodId`, malformed or invalid
   `foodPrefs`, or an empty PUT
 
-There is deliberately no release or rename endpoint in v1: a claimed fork stays
-claimed until the process restarts.
+Renaming a claimed fork stays out of scope in v1; releasing one back to the
+pool is `POST /api/forks/leave` (below).
+
+### POST /api/forks/leave
+
+Leave the dinner: release your fork back to the pool. No body is expected —
+the session is the identity and a guest holds at most one fork, so any
+request body is ignored. The fork returns to the pool unclaimed and empty:
+`food` cleared, `foodPrefs` and `progress` reset — free for any guest to
+claim again, including you, with the same or another fork.
+
+Leaving also re-baselines the fork's dip timeline as out of the pot, so no
+cooking time carries over to the next holder's food: when the sensor next
+reports the fork in the pot, a fresh dip starts at that report.
+
+Responds `200` with the released fork, or `200` with `null` when the session
+held no fork — the endpoint is idempotent, so leaving twice, or leaving
+without ever claiming, is not an error. Your standing food preferences stay
+with your session and are re-declared in full on your next claim.
 
 ### POST /api/sensor/:dinnerId
 
@@ -177,9 +194,10 @@ starts a new session and overwrites the jar, silently turning you into a
 different guest.
 
 The walkthrough picks the first unclaimed fork, so it works even on a dinner
-with leftovers — claims are one-shot and there is no release endpoint, so a
-hardcoded fork would collide with earlier runs. When no fork is free, restart
-the API: the dinner is in-memory and resets with the process. Adjust the port
+with leftovers — claims are one-shot, and earlier runs hold their forks
+unless they left via `POST /api/forks/leave`, so a hardcoded fork would
+collide with them. When no fork is free, have a holder leave or restart the
+API: the dinner is in-memory and resets with the process. Adjust the port
 if your server runs elsewhere; a jar saved against one instance does not work
 against another — the claim simply does not exist there.
 
@@ -219,6 +237,11 @@ curl -s -b cookies.txt -c cookies.txt -X PUT http://localhost:8082/api/forks \
 curl -s -b cookies.txt -c cookies.txt -X PUT http://localhost:8082/api/forks \
   -H 'Content-Type: application/json' \
   -d "$(jq -nc --arg id "$FORK" '{id: $id, food: null}')" | jq
+
+# Leave the dinner — releases your fork back to the pool, empty and with a
+# fresh dip clock (idempotent: 200 even if you hold none; the jar keeps its
+# session, so you can claim again).
+curl -s -b cookies.txt -c cookies.txt -X POST http://localhost:8082/api/forks/leave | jq
 
 # Show just my fork
 curl -s -b cookies.txt -c cookies.txt http://localhost:8082/api/forks/mine

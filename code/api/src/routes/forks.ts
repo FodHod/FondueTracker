@@ -24,7 +24,8 @@ function readPrefRecord(value: unknown): FoodPrefChoice | null {
 /**
  * The fork endpoints: list the pool (each fork carrying its holder's food
  * preferences), fetch the session user's own fork, claim a fork (one-shot,
- * one fork per guest, full preference declaration), and update the food
+ * one fork per guest, full preference declaration), leave the dinner
+ * (releasing the held fork back to the pool), and update the food
  * and/or preferences of a fork the session holds.
  */
 export function createForksRouter(store: ForkStore, sensorStore: SensorStore): Router {
@@ -136,6 +137,18 @@ export function createForksRouter(store: ForkStore, sensorStore: SensorStore): R
             return
         }
         res.json(claimed)
+    })
+
+    // Leaving the dinner: the fork returns to the pool empty and its dip
+    // timeline re-baselines as out of the pot, so the next holder's food
+    // inherits none of the old cooking time. Idempotent: a session that
+    // holds no fork still gets a 200 (with a null body).
+    router.post('/leave', (req, res) => {
+        const released = store.release(req.userId)
+        if (released) {
+            sensorStore.restartDip(released.id, released.dinnerId, false, Date.now())
+        }
+        res.json(released)
     })
 
     router.put('/', (req, res) => {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app'
 import { fullFoodPrefs } from './helpers'
@@ -295,5 +295,152 @@ describe('PUT /api/forks (food)', () => {
     it('rejects setting food while the fork is unclaimed with 403', async () => {
         const res = await setFood(request.agent(app), 'fork-3', { foodId: 'beef' })
         expect(res.status).toBe(403)
+    })
+})
+
+describe('POST /api/forks/leave', () => {
+    it('releases the held fork back to the pool and clears its food', async () => {
+        const agent = request.agent(app)
+        await claim(agent, 'fork-1', 'Alice')
+        await setFood(agent, 'fork-1', { foodId: 'beef' })
+
+        const res = await agent.post('/api/forks/leave')
+        expect(res.status).toBe(200)
+        const fork = res.body as Fork
+        expect(fork.id).toBe('fork-1')
+        expect(fork.userId).toBeNull()
+        expect(fork.userName).toBeNull()
+        expect(fork.food).toBeNull()
+        expect(fork.foodPrefs).toBeNull()
+        expect(fork.progress).toBe(0)
+
+        const list = await agent.get('/api/forks').set('Accept', 'application/json')
+        const released = (list.body as Fork[]).find((f) => f.id === 'fork-1') as Fork
+        expect(released.userId).toBeNull()
+        expect(released.userName).toBeNull()
+        expect(released.food).toBeNull()
+        expect(released.foodPrefs).toBeNull()
+    })
+
+    it('succeeds with 200 and a null body when the session holds no fork', async () => {
+        const res = await request.agent(app).post('/api/forks/leave')
+        expect(res.status).toBe(200)
+        expect(res.body).toBeNull()
+    })
+
+    it('is idempotent: leaving twice still returns 200', async () => {
+        const agent = request.agent(app)
+        await claim(agent, 'fork-1', 'Alice')
+
+        const first = await agent.post('/api/forks/leave')
+        expect(first.status).toBe(200)
+        const again = await agent.post('/api/forks/leave')
+        expect(again.status).toBe(200)
+        expect(again.body).toBeNull()
+    })
+
+    it('lets the same guest claim another fork afterwards', async () => {
+        const agent = request.agent(app)
+        await claim(agent, 'fork-1', 'Alice')
+        expect((await agent.post('/api/forks/leave')).status).toBe(200)
+
+        const reclaim = await claim(agent, 'fork-2', 'Alice')
+        expect(reclaim.status).toBe(200)
+        expect((reclaim.body as Fork).id).toBe('fork-2')
+    })
+
+    it('frees the fork for another guest to claim', async () => {
+        const alice = request.agent(app)
+        await claim(alice, 'fork-1', 'Alice')
+        expect((await alice.post('/api/forks/leave')).status).toBe(200)
+
+        const bob = request.agent(app)
+        const res = await claim(bob, 'fork-1', 'Bob')
+        expect(res.status).toBe(200)
+        expect((res.body as Fork).userName).toBe('Bob')
+    })
+
+    it('leaves the forks of other guests untouched', async () => {
+        const alice = request.agent(app)
+        const bob = request.agent(app)
+        await claim(alice, 'fork-1', 'Alice')
+        await claim(bob, 'fork-2', 'Bob')
+
+        expect((await alice.post('/api/forks/leave')).status).toBe(200)
+
+        const mine = await bob.get('/api/forks/mine')
+        expect(mine.status).toBe(200)
+        expect((mine.body as Fork).id).toBe('fork-2')
+        expect((mine.body as Fork).userName).toBe('Bob')
+    })
+})
+
+describe('POST /api/forks/leave (dip re-baseline)', () => {
+    const ORIGINAL_TOKEN = process.env.SENSOR_TOKEN
+    let app: ReturnType<typeof createApp>
+
+    // The faked "now" every dip is backdated against.
+    const NOW_MS = new Date('2026-01-01T12:00:00Z').getTime()
+    const SEC = 1000
+
+    beforeEach(() => {
+        process.env.SENSOR_TOKEN = 'test-token'
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date(NOW_MS))
+        app = createApp()
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+        if (ORIGINAL_TOKEN === undefined) {
+            delete process.env.SENSOR_TOKEN
+        } else {
+            process.env.SENSOR_TOKEN = ORIGINAL_TOKEN
+        }
+    })
+
+    /** Reports the pot sensor; `timeMs` is the device clock in ms (the route takes seconds). */
+    async function report(timeMs: number, inPot: boolean) {
+        const res = await request(app)
+            .post('/api/sensor/default')
+            .set('Authorization', 'Bearer test-token')
+            .send({ time: timeMs / SEC, temperature: 90, tags: [{ id: 1, in_pot: inPot }] })
+        expect(res.status).toBe(201)
+    }
+
+    async function progressOf(agent: Agent): Promise<number> {
+        const res = await agent.get('/api/forks').set('Accept', 'application/json')
+        expect(res.status).toBe(200)
+        const fork = (res.body as ForkListItem[]).find((f) => f.id === 'fork-1') as ForkListItem
+        return fork.progress
+    }
+
+    it('takes the fork out of the pot and starts the next dip on a fresh clock', async () => {
+        // A dip that started 5 s ago: beef rare (10-20 s window) is half done.
+        await report(NOW_MS - (5 + 1) * SEC, false)
+        await report(NOW_MS - 5 * SEC, true)
+
+        const agent = request.agent(app)
+        await claim(agent, 'fork-1', 'Alice')
+        await setFood(agent, 'fork-1', { foodId: 'beef' })
+        expect(await progressOf(agent)).toBe(0.5)
+
+        const leave = await agent.post('/api/forks/leave')
+        expect(leave.status).toBe(200)
+
+        // Re-baselined: the fork reads as out of the pot and back in the pool empty.
+        const list = await agent.get('/api/forks').set('Accept', 'application/json')
+        const fork = (list.body as ForkListItem[]).find((f) => f.id === 'fork-1') as ForkListItem
+        expect(fork.inPot).toBe(false)
+        expect(fork.userId).toBeNull()
+        expect(fork.food).toBeNull()
+        expect(fork.progress).toBe(0)
+
+        // The sensor reports the fork in the pot again: the dip restarts at that
+        // report, so the next holder's food inherits none of the old cooking time.
+        await report(NOW_MS, true)
+        await claim(agent, 'fork-1', 'Alice')
+        await setFood(agent, 'fork-1', { foodId: 'beef' })
+        expect(await progressOf(agent)).toBe(0)
     })
 })
