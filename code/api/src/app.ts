@@ -14,12 +14,15 @@ export function createApp() {
     const app = express()
 
     // Request logging: terse colored lines in dev, combined format in prod.
-    // Health probes are skipped so the Docker HEALTHCHECK does not spam.
-    app.use(
-        morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev', {
-            skip: (req) => req.path === '/healthz',
-        }),
-    )
+    // Off by default (too noisy); set REQUEST_LOGS=1 to switch it on. Health
+    // probes are skipped so the Docker HEALTHCHECK does not spam.
+    if (process.env.REQUEST_LOGS === '1') {
+        app.use(
+            morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev', {
+                skip: (req) => req.path === '/healthz',
+            }),
+        )
+    }
 
     // Request parsers: handlers see the same req.body for JSON and form payloads.
     app.use(express.json())
