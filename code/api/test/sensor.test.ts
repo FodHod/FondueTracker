@@ -7,14 +7,14 @@ const EXAMPLE: SensorMeasurement = {
     time: 1793443169.0806723,
     temperature: 27,
     tags: [
-        { id: 7, in_pot: true },
-        { id: 4, in_pot: true },
-        { id: 3, in_pot: true },
-        { id: 2, in_pot: true },
-        { id: 1, in_pot: true },
-        { id: 5, in_pot: true },
-        { id: 6, in_pot: true },
-        { id: 8, in_pot: true },
+        { id: 7, in_pot: true, food_id: null },
+        { id: 4, in_pot: true, food_id: null },
+        { id: 3, in_pot: true, food_id: null },
+        { id: 2, in_pot: true, food_id: null },
+        { id: 1, in_pot: true, food_id: null },
+        { id: 5, in_pot: true, food_id: null },
+        { id: 6, in_pot: true, food_id: null },
+        { id: 8, in_pot: true, food_id: null },
     ],
 }
 

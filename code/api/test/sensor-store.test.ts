@@ -4,7 +4,7 @@ import type { SensorMeasurement } from '../src/types'
 
 /** One pot report: time in ms, broth at 90 °C, and the given tag states. */
 function report(timeMs: number, tags: { id: number; in_pot: boolean }[]): SensorMeasurement {
-    return { time: timeMs, temperature: 90, tags }
+    return { time: timeMs, temperature: 90, tags: tags.map((tag) => ({ ...tag, food_id: null })) }
 }
 
 describe('sensor store (materialized dip state)', () => {
@@ -95,5 +95,50 @@ describe('sensor store (materialized dip state)', () => {
             removedAt: null,
             tempAtInsertC: 90,
         })
+    })
+})
+
+describe('sensor store restartDip (food change)', () => {
+    /** One pot report: time in ms, broth at 90 °C, and the given tag states. */
+    function report(timeMs: number, tags: { id: number; in_pot: boolean }[]): SensorMeasurement {
+        return { time: timeMs, temperature: 90, tags: tags.map((tag) => ({ ...tag, food_id: null })) }
+    }
+
+    it('re-baselines a running dip at the given time', () => {
+        const store = createSensorStore()
+        store.append('default', report(1000, [{ id: 1, in_pot: true }]))
+        store.restartDip('fork-1', 'default', true, 5000, 85)
+        expect(store.getDipState('fork-1', 'default')).toEqual({
+            inPot: true,
+            insertedAt: 5000,
+            removedAt: null,
+            tempAtInsertC: 85,
+        })
+    })
+
+    it('keeps the last temperature when none is given', () => {
+        const store = createSensorStore()
+        store.append('default', report(1000, [{ id: 1, in_pot: true }]))
+        store.restartDip('fork-1', 'default', true, 5000)
+        expect(store.getDipState('fork-1', 'default')?.tempAtInsertC).toBe(90)
+    })
+
+    it('clears the timeline entirely when the fork is out of the pot', () => {
+        const store = createSensorStore()
+        store.append('default', report(1000, [{ id: 1, in_pot: true }]))
+        store.append('default', report(2000, [{ id: 1, in_pot: false }]))
+        store.restartDip('fork-1', 'default', false, 5000)
+        expect(store.getDipState('fork-1', 'default')).toEqual({
+            inPot: false,
+            insertedAt: null,
+            removedAt: null,
+            tempAtInsertC: null,
+        })
+    })
+
+    it('is a no-op for a fork the sensor has never reported', () => {
+        const store = createSensorStore()
+        store.restartDip('fork-1', 'default', true, 5000, 90)
+        expect(store.getDipState('fork-1', 'default')).toBeNull()
     })
 })

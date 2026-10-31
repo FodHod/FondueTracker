@@ -204,6 +204,13 @@ export function createForksRouter(store: ForkStore, sensorStore: SensorStore): R
 
         // Everything validated; apply atomically, then respond with fresh state.
         if (food !== undefined) {
+            const existing = fork.food ?? null
+            if (food !== null && existing !== null && existing.foodId !== food.foodId) {
+                // A new piece replaces a different one already on the fork: the
+                // dip clock restarts so no cooking time carries over.
+                const dip = sensorStore.getDipState(forkId, fork.dinnerId)
+                sensorStore.restartDip(forkId, fork.dinnerId, dip?.inPot ?? false, Date.now())
+            }
             store.setFood(forkId, food)
         }
         for (const pref of prefChanges) {

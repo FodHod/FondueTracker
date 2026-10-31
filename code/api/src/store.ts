@@ -214,5 +214,29 @@ export function createSensorStore() {
         return rec ? { ...rec } : null
     }
 
-    return { append, getDipState }
+    /**
+     * Re-baselines the fork's dip timeline: a food change must not carry the
+     * old piece's cooking progress over to the new one. In the pot, the new
+     * food counts as dipped since `timeMs`; out of it, the timeline clears
+     * entirely. No-op for a fork the sensor has never reported.
+     */
+    function restartDip(forkId: string, dinnerId: string, inPot: boolean, timeMs: number, tempC?: number): void {
+        const rec = dinners.get(dinnerId)?.get(forkId)
+        if (!rec) {
+            return
+        }
+        rec.inPot = inPot
+        if (inPot) {
+            rec.insertedAt = timeMs
+            rec.removedAt = null
+            rec.tempAtInsertC = tempC ?? rec.tempAtInsertC
+        } else {
+            rec.insertedAt = null
+            rec.removedAt = null
+            rec.tempAtInsertC = null
+        }
+        logger.info('dip re-baselined for a new food', { forkId, inPot, at: new Date(timeMs).toISOString() })
+    }
+
+    return { append, getDipState, restartDip }
 }

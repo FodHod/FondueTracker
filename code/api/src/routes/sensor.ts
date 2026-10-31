@@ -86,8 +86,15 @@ export function createSensorRouter(sensorStore: SensorStore, forkStore: ForkStor
         for (const fork of measurement.tags) {
             const food = findFood(fork.food_id ?? 'unknown');
             if (!!food) {
+                const forkId = `fork-${fork.id}`;
+                const existing = forkStore.get(forkId)?.food ?? null;
+                if (existing !== null && existing.foodId !== food.foodId) {
+                    // A new piece replaces a different one already on the fork:
+                    // the dip clock restarts so no cooking time carries over.
+                    sensorStore.restartDip(forkId, req.params.dinnerId, fork.in_pot, measurement.time * 1000, measurement.temperature);
+                }
                 logger.info(`Setting food for fork ${fork.id}: ${food.foodName}`);
-                forkStore.setFood(`fork-${fork.id}`, food);
+                forkStore.setFood(forkId, food);
             }
         }
         res.status(201).json(measurement);

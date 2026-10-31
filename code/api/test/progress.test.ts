@@ -126,4 +126,74 @@ describe('fork progress on GET /api/forks', () => {
         const agent = await claimFork()
         expect(await progressOf(agent)).toBe(0)
     })
+
+    describe('food change resets the dip timeline', () => {
+        /** Reports the pot sensor with a food on fork-1; `timeMs` is the device clock in ms. */
+        async function reportFood(timeMs: number, inPot: boolean, foodId: string) {
+            const res = await request(app)
+                .post('/api/sensor/default')
+                .set('Authorization', 'Bearer test-token')
+                .send({ time: timeMs / SEC, temperature: 90, tags: [{ id: 1, in_pot: inPot, food_id: foodId }] })
+            expect(res.status).toBe(201)
+        }
+
+        /** Puts a food on fork-1 via the holder's API. */
+        async function putFood(agent: Agent, foodId: string) {
+            const res = await agent.put('/api/forks').send({ id: 'fork-1', food: { foodId } })
+            expect(res.status).toBe(200)
+        }
+
+        it('restarts at 0 when the sensor reports a different food on a dipping fork', async () => {
+            const agent = await claimFork()
+            await reportFood(NOW_MS - 60 * SEC, true, 'chicken')
+            expect(await progressOf(agent)).toBeCloseTo(60 / 90, 5)
+
+            // The swap: beef goes on while the fork stays in the pot.
+            await reportFood(NOW_MS, true, 'beef')
+            const swap = await agent.get('/api/forks').set('Accept', 'application/json')
+            expect(swap.status).toBe(200)
+            const fork = (swap.body as Fork[]).find((f) => f.id === 'fork-1') as Fork
+            expect(fork.food?.foodId).toBe('beef')
+            expect(fork.progress).toBe(0)
+
+            // Duplicate reports of the same food keep ramping from the swap.
+            vi.setSystemTime(new Date(NOW_MS + 5 * SEC))
+            await reportFood(NOW_MS + 5 * SEC, true, 'beef')
+            expect(await progressOf(agent)).toBe(0.5)
+
+            vi.setSystemTime(new Date(NOW_MS + 15 * SEC))
+            await reportFood(NOW_MS + 15 * SEC, true, 'beef')
+            expect(await progressOf(agent)).toBe(1)
+        })
+
+        it('restarts at 0 when the holder PUTs a different food on a dipping fork', async () => {
+            const agent = await claimFork()
+            await reportFood(NOW_MS - 60 * SEC, true, 'chicken')
+            await putFood(agent, 'beef')
+            expect(await progressOf(agent)).toBe(0)
+
+            vi.setSystemTime(new Date(NOW_MS + 5 * SEC))
+            expect(await progressOf(agent)).toBe(0.5)
+        })
+
+        it('clears the frozen progress of the previous food when swapped out of the pot', async () => {
+            const agent = await claimFork()
+            await reportFood(NOW_MS - 5 * SEC, true, 'chicken')
+            await report(NOW_MS - 2 * SEC, false)
+            await putFood(agent, 'beef')
+            expect(await progressOf(agent)).toBe(0)
+
+            await report(NOW_MS - SEC, true)
+            expect(await progressOf(agent)).toBe(0.1)
+        })
+
+        it('keeps progress when the same food is set again (duplicate request)', async () => {
+            await dip(5)
+            const agent = await claimForkWithBeef()
+            expect(await progressOf(agent)).toBe(0.5)
+
+            await putFood(agent, 'beef')
+            expect(await progressOf(agent)).toBe(0.5)
+        })
+    })
 })
