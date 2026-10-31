@@ -3,12 +3,10 @@
 A short, clear description of what your project does and who it helps.
 
 ## The Problem
-
-What problem are you solving? Why does it matter?
+Everyday people fight with overcooked Fondue Chinoise meat or worse: get food poison eating undercooked one. Aside from health hazards and potential food waste, friendships get destroyed and Christmas for families of all parts of Switzerland ruined. 
 
 ## Our Solution
-
-How does your project solve the problem? What makes it useful or different?
+Our solution is simple and non-intrusive. Achieving XXX% accuracy in predicting when YOUR piece of meat is done.
 
 ## Demo
 
@@ -17,28 +15,43 @@ How does your project solve the problem? What makes it useful or different?
 
 ## Features
 
-- Feature one
-- Feature two
-- Feature three
+- Feature Gabel Detection
+- Feature Meat Doneness Algorithm
+- Feature XYZ
 
 ## Tech Stack
 
 - **Frontend:** 
+  - React (Typescript)
+  - Vite
+  - ESLint
+  - (Tailwind)
 - **Backend:** 
-- **Database:** 
-- **Tools/APIs:** 
+  - Python
+  - Express Server (NodeJS, Typescript)
+- **Tools/API:** 
+  - Raspberry PI
+  - Temperature Sensor
+  - Camera
+- **Infrastructure:**
+  - Docker
+  - Github Actions
+  - Kubernetes
 
 ## Getting Started
 
 ### Prerequisites
 
-- [Required language, runtime, or tool]
+- Python VERIONNUMBER TBD
 - [Any accounts, API keys, or services needed]
 
 ### Installation
 
 ```bash
-git clone <repository-url>
-cd <project-folder>
+git clone https://github.com/FodHod/FondueTracker.git
+cd FondueTracker
+
 # Install dependencies
+TDB
+```
 
