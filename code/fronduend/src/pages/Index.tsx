@@ -3,14 +3,14 @@ import {useEffect, useState} from "react";
 import api from "../api/api.ts";
 import logo from "../assets/images/caquelon-logo.png";
 
-function getForkQuip(progressPct: number) {
-    if (progressPct <= 0) return "Chilling outside the pot";
+function getForkQuip(progressPct: number, inPot: boolean) {
+    if (!inPot && progressPct <= 0) return "Chilling outside the pot";
+    if (progressPct <= 0) return "Just dipped in the pot";
     if (progressPct < 30) return "Just dipped! Barely warm";
     if (progressPct < 70) return "Getting nice & sizzly...";
     if (progressPct < 100) return "Almost ready! Open wide";
     return "Done";
 }
-
 
 export default function Index() {
     const [forks, setForks] = useState<Fork[]>([])
@@ -20,11 +20,12 @@ export default function Index() {
     }
 
     useEffect(() => {
-        updateForkProgress()
-        setInterval(updateForkProgress, 1000);
+        updateForkProgress();
+        const interval = setInterval(updateForkProgress, 1000);
+        return () => clearInterval(interval);
     }, [])
 
-    const activeForks = forks.filter(fork => fork.userName && fork.inPot);
+    const activeForks = forks.filter(fork => fork.userName);
 
     return (
         <main className="mx-auto max-w-md px-4 pt-6 pb-8">
@@ -43,8 +44,7 @@ export default function Index() {
                 <div className="cartoon-card p-6 text-center">
                     <p className="text-xl font-bold">The pot is lonely!</p>
                     <p className="mt-1 text-sm text-text-muted">
-                        No forks claimed yet. Tap <strong>Add Fork</strong> below to or put your fork in the pot join
-                        the feast!
+                        No forks claimed yet. Tap <strong>Add Fork</strong> below to join the feast!
                     </p>
                 </div>
             ) : (
@@ -91,7 +91,7 @@ export default function Index() {
                                 </div>
 
                                 <p className="mt-2 text-xs font-medium text-text-muted">
-                                    {getForkQuip(pct)}
+                                    {getForkQuip(pct, fork.inPot)}
                                     {fork.food?.foodName ? ` • Cooking ${fork.food.foodName}` : ""}
                                 </p>
                             </div>

@@ -1,4 +1,4 @@
-import {NavLink} from "react-router-dom";
+import {NavLink, useLocation} from "react-router-dom";
 import dashboardIcon from "../assets/images/caquelon-dashboard-icon.png";
 import addIcon from "../assets/images/add-button-icon.png";
 import leaveIcon from "../assets/images/leave-button-icon.png";
@@ -6,15 +6,20 @@ import {useEffect, useState} from "react";
 import api from "../api/api.ts";
 
 export default function Navbar() {
-
+    const location = useLocation();
     const [hasFork, setHasFork] = useState<boolean>(false);
 
     useEffect(() => {
         api.getMyFork()
-            .then(() => setHasFork(true))
-            .catch(() => {
-            })
-    })
+            .then((res) => setHasFork(Boolean(res.data?.userName)))
+            .catch(() => setHasFork(false));
+    }, [location.pathname]);
+
+    const handleLeave = () => {
+        api.leavePot().then(() => {
+            setHasFork(false);
+        });
+    };
 
     return (
         <nav
@@ -45,11 +50,11 @@ export default function Navbar() {
                             isActive ? "scale-105 opacity-100 font-bold text-text-main" : "opacity-60 hover:opacity-90 font-medium text-text-muted"
                         }`
                     }
-                    onClick={api.leavePot}
+                    onClick={handleLeave}
                 >
                     <img
                         src={leaveIcon}
-                        alt="Add Fork"
+                        alt="Leave"
                         className="-mb-1.5 h-16 w-16 object-contain"
                     />
                     <span className="text-xs leading-none">Leave</span>
