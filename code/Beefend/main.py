@@ -32,7 +32,7 @@ MEAT_TAGS = {
     6: "Beef",
     7: "Pork",
 }
-MEAT_RADIUS_PX = 100  # fork tip within this of a meat tag -> fork gets that meat
+MEAT_RADIUS_PX = 70  # fork tip within this of a meat tag -> fork gets that meat
 # Fork tip = code center + this many px along the code's START->STOP direction.
 # In the pot when the tip is inside the pot circle. Negative if the strip is wrapped
 # with START toward the tines.
