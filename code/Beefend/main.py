@@ -1,14 +1,18 @@
 import csv
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
 import cv2
 import imageio_ffmpeg
 import numpy as np
+import requests
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
 OUT_DIR = Path("output")
+SEND_INTERVAL = 1.0  # seconds between on_tags() calls in live mode
+SEND_URL = None  # e.g. "http://192.168.1.50:8000/tags"; None = only print
 
 DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
@@ -92,14 +96,80 @@ def process_video(path: Path):
     print("  per id: " + ", ".join(f"{i}={n}" for i, n in sorted(ids.items())))
 
 
+def camera_frames(source: str):
+    """Yield BGR frames from "picam" (Pi camera module), a webcam index, or a stream URL."""
+    if source == "picam":
+        from picamera2 import Picamera2  # Pi only: sudo apt install python3-picamera2
+        cam = Picamera2()
+        cam.configure(cam.create_video_configuration(main={"size": (1280, 720), "format": "RGB888"}))
+        cam.start()
+        try:
+            while True:
+                yield cam.capture_array()  # "RGB888" is BGR in memory, as OpenCV expects
+        finally:
+            cam.stop()
+    else:
+        cap = cv2.VideoCapture(int(source) if source.isdigit() else source)
+        if not cap.isOpened():
+            raise SystemExit(f"{source}: could not open")
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    return
+                yield frame
+        finally:
+            cap.release()
+
+
+def on_tags(tags: list[dict], t_s: float):
+    """Called at most every SEND_INTERVAL with the current tags; POSTs them to SEND_URL."""
+    print(f"{t_s:7.2f}s  " + "  ".join(f"id={t['id']}@({t['x']:.0f},{t['y']:.0f})" for t in tags))
+    if SEND_URL is None:
+        return
+    try:
+        # Short timeout: this runs inside the camera loop, so a slow server stalls the preview.
+        r = requests.post(SEND_URL, json={"time": time.time(), "tags": tags}, timeout=0.5)
+        print(f"         -> {r.status_code}")
+    except requests.RequestException as e:
+        print(f"         -> send failed: {e}")
+
+
+def process_live(source: str):
+    """Show a live preview and pass detections to on_tags() until q or Ctrl+C."""
+    start = time.monotonic()
+    last_sent = -SEND_INTERVAL
+    frames = detections = 0
+    try:
+        for frame in camera_frames(source):
+            tags = detect(frame)
+            now = time.monotonic() - start
+            if tags and now - last_sent >= SEND_INTERVAL:
+                on_tags([{"id": t["id"], "x": float(t["center"][0]), "y": float(t["center"][1])}
+                         for t in tags], now)
+                last_sent = now
+            detections += len(tags)
+            frames += 1
+            cv2.imshow("apriltags", draw(frame, tags))
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+    except KeyboardInterrupt:
+        pass
+    cv2.destroyAllWindows()
+    elapsed = time.monotonic() - start
+    print(f"\n{source}: {frames} frames in {elapsed:.1f}s ({frames / elapsed:.1f} fps), "
+          f"{detections} detections")
+
+
 def main():
-    paths = [Path(p) for p in sys.argv[1:]] or sorted(Path("images").glob("*.png"))
     OUT_DIR.mkdir(exist_ok=True)
-    for path in paths:
-        if path.suffix.lower() in VIDEO_EXTS:
-            process_video(path)
+    for source in sys.argv[1:] or sorted(str(p) for p in Path("images").glob("*.png")):
+        if source == "picam" or source.isdigit() or "://" in source:
+            process_live(source)
+        elif Path(source).suffix.lower() in VIDEO_EXTS:
+            process_video(Path(source))
         else:
-            process_image(path)
+            process_image(Path(source))
 
 
 if __name__ == "__main__":
