@@ -111,54 +111,67 @@ claimed until the process restarts.
 With the dev server running (`npm run dev`), the cookie jar plays the role of the
 browser: `-c cookies.txt` stores the `_session` cookie on first contact and
 `-b cookies.txt` sends it back on every request. The jar is your identity — a
-fresh jar is a new guest, and losing it orphans your fork.
+fresh jar is a new guest, and losing it orphans your fork. Use both together
+(`-b cookies.txt -c cookies.txt`) on every call after the first: a bare `-c`
+starts a new session and overwrites the jar, silently turning you into a
+different guest.
 
-The examples use port 8082 (e.g. `PORT=8082 npm run dev`); if your server
-runs elsewhere, adjust the URLs. Every server process holds its own dinner
-state, so a jar saved against one instance does not work against another —
-the claim simply does not exist there.
+The walkthrough picks the first unclaimed fork, so it works even on a dinner
+with leftovers — claims are one-shot and there is no release endpoint, so a
+hardcoded fork would collide with earlier runs. When no fork is free, restart
+the API: the dinner is in-memory and resets with the process. Adjust the port
+if your server runs elsewhere; a jar saved against one instance does not work
+against another — the claim simply does not exist there.
 
 ```sh
-# List all forks; this first request also stores your session cookie.
-curl -si -c cookies.txt http://localhost:8082/api/forks
+# Pick the first unclaimed fork.
+FORK=$(curl -s http://localhost:8082/api/forks \
+  | jq -r '[.[] | select(.userId == null)][0].id')
 
-# Claim fork-1 as Alice, declaring a doneness preference for every food.
-curl -s -b cookies.txt -X POST http://localhost:8082/api/forks \
-  -H 'Content-Type: application/json' \
-  -d '{"id":"fork-1","userName":"Alice","foodPrefs":[{"foodId":"beef","prefId":"rare"},{"foodId":"chicken","prefId":"cooked"},{"foodId":"bread","prefId":"toasted"},{"foodId":"mushroom","prefId":"firm"},{"foodId":"pineapple","prefId":"warm"}]}'
+# First contact: stores your session cookie in the jar.
+curl -s -c cookies.txt http://localhost:8082/api/forks | jq
+
+# Claim the fork as Alice, declaring a doneness preference for every food.
+CLAIM=$(jq -nc --arg id "$FORK" '{id: $id, userName: "Alice", foodPrefs: [
+  {foodId: "beef", prefId: "rare"},
+  {foodId: "chicken", prefId: "cooked"},
+  {foodId: "bread", prefId: "toasted"},
+  {foodId: "mushroom", prefId: "firm"},
+  {foodId: "pineapple", prefId: "warm"}]}')
+curl -s -b cookies.txt -c cookies.txt -X POST http://localhost:8082/api/forks \
+  -H 'Content-Type: application/json' -d "$CLAIM" | jq
+
+# List again — your own fork comes first, foodPrefs on every claimed fork.
+curl -s -b cookies.txt -c cookies.txt http://localhost:8082/api/forks | jq
 
 # Put beef on your fork (only food.foodId is read).
-curl -s -b cookies.txt -X PUT http://localhost:8082/api/forks \
+curl -s -b cookies.txt -c cookies.txt -X PUT http://localhost:8082/api/forks \
   -H 'Content-Type: application/json' \
-  -d '{"id": "fork-1", "food": {"foodId": "beef"}}'
+  -d "$(jq -nc --arg id "$FORK" '{id: $id, food: {foodId: "beef"}}')" | jq
+
+# Change your mind about beef doneness (merged by foodId; other foods untouched).
+curl -s -b cookies.txt -c cookies.txt -X PUT http://localhost:8082/api/forks \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -nc --arg id "$FORK" '{id: $id, foodPrefs: [{foodId: "beef", prefId: "medium"}]}')" | jq
 
 # Take the food off again.
-curl -s -b cookies.txt -X PUT http://localhost:8082/api/forks \
+curl -s -b cookies.txt -c cookies.txt -X PUT http://localhost:8082/api/forks \
   -H 'Content-Type: application/json' \
-  -d '{"id": "fork-1", "food": null}'
-
-# Change your mind about beef doneness (merged by foodId, other foods untouched).
-curl -s -b cookies.txt -X PUT http://localhost:8082/api/forks \
-  -H 'Content-Type: application/json' \
-  -d '{"id": "fork-1", "foodPrefs": [{"foodId": "beef", "prefId": "medium"}]}'
-
-# List again — your own fork now comes first.
-curl -s -b cookies.txt http://localhost:8082/api/forks
+  -d "$(jq -nc --arg id "$FORK" '{id: $id, food: null}')" | jq
 
 # The food catalog (no cookie needed).
-curl -s http://localhost:8082/api/foods
+curl -s http://localhost:8082/api/foods | jq
 
 # Without the jar you are a different guest: someone else's fork -> 409.
 curl -s -X POST http://localhost:8082/api/forks \
-  -H 'Content-Type: application/json' \
-  -d '{"id":"fork-1","userName":"Late","foodPrefs":[{"foodId":"beef","prefId":"rare"},{"foodId":"chicken","prefId":"cooked"},{"foodId":"bread","prefId":"toasted"},{"foodId":"mushroom","prefId":"firm"},{"foodId":"pineapple","prefId":"warm"}]}'
+  -H 'Content-Type: application/json' -d "$CLAIM" | jq
 ```
 
 ## Development
 
 ```sh
 npm install
-npm run dev        # tsx watch on :8082
+npm run dev        # tsx watch (default port 8080)
 npm test           # vitest + supertest
 npm run typecheck  # tsc --noEmit
 ```

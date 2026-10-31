@@ -100,6 +100,44 @@ describe('POST /api/forks (claim)', () => {
     })
 })
 
+describe('GET /api/forks/mine', () => {
+    it('returns the fork held by the session user', async () => {
+        const agent = request.agent(app)
+        await claim(agent, 'fork-1', 'Alice')
+
+        const res = await agent.get('/api/forks/mine')
+        expect(res.status).toBe(200)
+        const fork = res.body as Fork
+        expect(fork.id).toBe('fork-1')
+        expect(fork.userName).toBe('Alice')
+        expect(fork.userId).toMatch(/^[0-9a-f-]{36}$/)
+    })
+
+    it('carries the food preferences declared at claim time', async () => {
+        const agent = request.agent(app)
+        await claim(agent, 'fork-1', 'Alice')
+
+        const res = await agent.get('/api/forks/mine')
+        const fork = res.body as Fork
+        expect(fork.foodPrefs).toEqual(fullFoodPrefs())
+    })
+
+    it('rejects a session that holds no fork with 404', async () => {
+        const res = await request.agent(app).get('/api/forks/mine')
+        expect(res.status).toBe(404)
+        expect(typeof res.body.error).toBe('string')
+    })
+
+    it('does not expose a fork held by another guest', async () => {
+        const owner = request.agent(app)
+        await claim(owner, 'fork-1', 'Alice')
+
+        const stranger = request.agent(app)
+        const res = await stranger.get('/api/forks/mine')
+        expect(res.status).toBe(404)
+    })
+})
+
 describe('PUT /api/forks (food)', () => {
     it('rejects unknown forks with 404', async () => {
         const res = await setFood(request.agent(app), 'fork-999', { foodId: 'beef' })

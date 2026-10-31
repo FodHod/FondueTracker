@@ -89,6 +89,16 @@ export function createForkStore() {
         return false
     }
 
+    /** The fork the user holds, or null when they hold none. */
+    function forUser(userId: string): Fork | null {
+        for (const fork of forks.values()) {
+            if (fork.userId === userId) {
+                return serialize(fork)
+            }
+        }
+        return null
+    }
+
     /** Claims the fork for the user; null when the fork does not exist. */
     function assign(id: string, userId: string, userName: string): Fork | null {
         const fork = forks.get(id)
@@ -120,5 +130,5 @@ export function createForkStore() {
         prefs.set(foodId, prefId)
     }
 
-    return { list, get, holdsFork, assign, setFood, setPref }
+    return { list, get, forUser, holdsFork, assign, setFood, setPref }
 }

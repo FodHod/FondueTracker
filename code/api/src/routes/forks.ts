@@ -22,9 +22,9 @@ function readPrefRecord(value: unknown): FoodPrefChoice | null {
 
 /**
  * The fork endpoints: list the pool (each fork carrying its holder's food
- * preferences), claim a fork (one-shot, one fork per guest, full preference
- * declaration), and update the food and/or preferences of a fork the session
- * holds.
+ * preferences), fetch the session user's own fork, claim a fork (one-shot,
+ * one fork per guest, full preference declaration), and update the food
+ * and/or preferences of a fork the session holds.
  */
 export function createForksRouter(store: ForkStore): Router {
     const router = Router()
@@ -40,6 +40,15 @@ export function createForksRouter(store: ForkStore): Router {
             return a.id.localeCompare(b.id, undefined, { numeric: true })
         })
         res.json(forks)
+    })
+
+    router.get('/mine', (req, res) => {
+        const fork = store.forUser(req.userId)
+        if (!fork) {
+            res.status(404).json({ error: 'you do not hold a fork' })
+            return
+        }
+        res.json(fork)
     })
 
     router.post('/', (req, res) => {
