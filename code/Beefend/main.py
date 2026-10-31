@@ -23,6 +23,11 @@ MARKER = "rings"
 RING_UNIT_PX = 8
 SEARCH_SCALE = 0.4
 CAMERA = "picam"
+POT_CHECK_EVERY = 60  # frames between AprilTag scans for the pot markers
+# Fork tip = code center + this many px along the code's START->STOP direction.
+# In the pot when the tip is inside the pot circle. Negative if the strip is wrapped
+# with START toward the tines.
+TIP_OFFSET_PX = 300
 
 DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
@@ -92,13 +97,64 @@ def camera_frames(source: str):
         finally:
             cap.release()
 
-x_min = 300
-x_max = 1400
-y_min = 100
-y_max = 700
+pot_tags = {}  # AprilTag id -> last seen center; kept when a scan doesn't see it
+
+
+def update_pot_tags(frame: np.ndarray, frame_no: int, verbose: bool):
+    seen = detect_apriltag(frame)
+    for t in seen:
+        pot_tags[t["id"]] = t["center"]
+    if verbose or seen:
+        print(f"pot scan frame {frame_no}: saw {sorted(t['id'] for t in seen)}, "
+              f"known {sorted(pot_tags)}")
+
+
+def pot_circle():
+    """Least-squares circle through the pot tags: ((cx, cy), r), or None with fewer than 3."""
+    if len(pot_tags) < 3:
+        return None
+    pts = np.array(list(pot_tags.values()), np.float64)
+    # x^2 + y^2 = 2a*x + 2b*y + c  ->  center (a, b), r^2 = c + a^2 + b^2
+    A = np.column_stack([2 * pts, np.ones(len(pts))])
+    (a, b, c), *_ = np.linalg.lstsq(A, (pts ** 2).sum(axis=1), rcond=None)
+    return (a, b), np.sqrt(c + a * a + b * b)
+
+
+def draw_pot(image: np.ndarray) -> np.ndarray:
+    circle = pot_circle()
+    if circle:
+        (cx, cy), r = circle
+        cv2.circle(image, (int(cx), int(cy)), int(r), (255, 128, 0), 2)
+    for tag_id, (x, y) in pot_tags.items():
+        cv2.drawMarker(image, (int(x), int(y)), (255, 128, 0), cv2.MARKER_CROSS, 20, 2)
+        cv2.putText(image, f"P{tag_id}", (int(x) + 8, int(y) - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 128, 0), 2)
+    return image
+
+def fork_tip(tag: dict) -> np.ndarray:
+    """Estimated tip position; AprilTags have no direction, so their center is used."""
+    if "start" not in tag:
+        return tag["center"]
+    direction = tag["stop"] - tag["start"]
+    return tag["center"] + direction / np.linalg.norm(direction) * TIP_OFFSET_PX
+
 
 def is_in_pot(tag):
-    return x_min < tag["x"] < x_max and y_min < tag["y"] < y_max
+    circle = pot_circle()
+    if circle is None:
+        return False
+    (cx, cy), r = circle
+    return np.hypot(tag["x"] - cx, tag["y"] - cy) < r
+
+
+def draw_tips(image: np.ndarray, tags: list[dict]) -> np.ndarray:
+    """Line from each code to its estimated tip: green inside the pot, red outside."""
+    for t in tags:
+        tip = fork_tip(t)
+        color = (0, 255, 0) if is_in_pot({"x": tip[0], "y": tip[1]}) else (0, 0, 255)
+        cv2.line(image, tuple(t["center"].astype(int)), tuple(tip.astype(int)), color, 2)
+        cv2.circle(image, tuple(tip.astype(int)), 8, color, -1)
+    return image
 
 def create_output(tags):
     in_pot_by_id = {}
@@ -137,7 +193,7 @@ def on_tags(tags: list[dict], now: float):
     }
     try:
         if tags and now - last_sent >= SEND_INTERVAL:
-            print(f"{now:6.1f}s {len(tags)} tags: {sorted({t['id'] for t in smoothed_tags})}")
+            print(f"{now:6.1f}s {len(tags)} smoothed tags: {sorted({t['id'] for t in smoothed_tags})}")
             send_queue.put_nowait(smoothed_output)
             last_sent = now
     except queue.Full:
@@ -161,16 +217,24 @@ def main():
     frames = detections = 0
     try:
         for frame in camera_frames(CAMERA):
+            # every frame until the circle exists (camera may still be settling), then periodic
+            if len(pot_tags) < 3 or frames % POT_CHECK_EVERY == 0:
+                update_pot_tags(frame, frames, verbose=frames % POT_CHECK_EVERY == 0)
             tags = detect(frame)
             now = time.monotonic() - start
-            on_tags([{"id": t["id"], "x": float(t["center"][0]), "y": float(t["center"][1])}
-                        for t in tags], now)
+            tips = [fork_tip(t) for t in tags]
+            on_tags([{"id": t["id"], "x": float(tip[0]), "y": float(tip[1])}
+                        for t, tip in zip(tags, tips)], now)
 
             detections += len(tags)
             frames += 1
-            cv2.imshow(MARKER, draw(frame, tags))
-            if cv2.waitKey(1) & 0xFF == ord("q"):
+            cv2.imshow(MARKER, draw_tips(draw(draw_pot(frame.copy()), tags), tags))
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
                 break
+            if key == ord("s"):  # save the raw frame, e.g. to check why tags aren't found
+                cv2.imwrite(f"frame_{frames}.png", frame)
+                print(f"saved frame_{frames}.png")
     except KeyboardInterrupt:
         pass
     cv2.destroyAllWindows()
