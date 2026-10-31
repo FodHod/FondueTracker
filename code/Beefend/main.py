@@ -28,8 +28,8 @@ POT_CHECK_EVERY = 60
 POT_TAG_IDS = (0, 1, 2, 4)
 # AprilTag ID -> (meat on the plate next to that tag, color in the preview as RGB).
 MEAT_TAGS = {
-    5: ("chicken", (255, 210, 0)),
     3: ("beef", (220, 30, 30)),
+    5: ("chicken", (255, 210, 0)),
 }
 MEAT_RADIUS_PX = 60  # fork tip within this of a meat tag -> fork gets that meat
 # Fork tip = code center + this many px along the code's START->STOP direction.
@@ -221,7 +221,7 @@ def on_tags(tags: list[dict], now: float):
     smoothed_tags = []
     for fork_id, fork_in_pot in in_pot.items():
         smoothed_tags.append({"id": fork_id, "in_pot": fork_in_pot,
-                              "meat": MEAT_TAGS[fork_meat[fork_id]][0] if fork_id in fork_meat else None})
+                              "food_id": MEAT_TAGS[fork_meat[fork_id]][0] if fork_id in fork_meat else None})
 
     smoothed_output = {
         "time": boolean_output["time"],
