@@ -11,6 +11,7 @@ import requests
 
 import threading
 import queue
+from collections import deque
 
 
 
@@ -147,14 +148,15 @@ def create_output(tags):
     return {"time": time.time(), "temperature": 27, "tags": processed_tags}
 
 
-def on_tags(tags: list[dict], t_s: float):
-    """Called at most every SEND_INTERVAL with the current tags; POSTs them to SEND_URL."""
-    print(f"{t_s:7.2f}s  " + "  ".join(f"id={t['id']}@({t['x']:.0f},{t['y']:.0f})" for t in tags))
+def on_tags(tags: list[dict], now: float):
+    print(f"{now:7.2f}s  " + "  ".join(f"id={t['id']}@({t['x']:.0f},{t['y']:.0f})" for t in tags))
     if SEND_URL is None:
         return
 
     try:
-        send_queue.put_nowait(create_output(tags))
+        if tags and now - last_sent >= SEND_INTERVAL:
+            send_queue.put_nowait(create_output(tags))
+            last_sent = now
     except queue.Full:
         pass 
 
@@ -179,10 +181,9 @@ def process_live(source: str):
         for frame in camera_frames(source):
             tags = detect(frame)
             now = time.monotonic() - start
-            if tags and now - last_sent >= SEND_INTERVAL:
-                on_tags([{"id": t["id"], "x": float(t["center"][0]), "y": float(t["center"][1])}
-                         for t in tags], now)
-                last_sent = now
+            on_tags([{"id": t["id"], "x": float(t["center"][0]), "y": float(t["center"][1])}
+                        for t in tags], now)
+
             detections += len(tags)
             frames += 1
             cv2.imshow("apriltags", draw(frame, tags))
