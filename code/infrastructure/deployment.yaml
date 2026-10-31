@@ -28,6 +28,11 @@ spec:
         env:
         - name: NODE_ENV
           value: production
+        - name: SENSOR_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: sensor-token
+              key: token
         resources:
           limits:
             cpu: 1

@@ -25,7 +25,8 @@ export function createApp() {
     app.use('/api/foods', createFoodsRouter())
 
     // The pot sensor's measurement log, keyed by the dinnerId in its path.
-    app.use('/api/sensor', createSensorRouter(createSensorStore()))
+    // The bearer token comes from the environment; unset means fail-closed.
+    app.use('/api/sensor', createSensorRouter(createSensorStore(), process.env.SENSOR_TOKEN))
 
     // Liveness endpoint for the Docker HEALTHCHECK and k8s probes.
     app.get('/healthz', (_req, res) => {

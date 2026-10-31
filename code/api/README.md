@@ -127,8 +127,15 @@ named in the path (the frontend's four endpoints are unaffected):
 `time` and `temperature` must be numbers, `tags` an array of `{ id, in_pot }`
 records (possibly empty); extra fields are ignored. The measurement is
 appended to that dinner's in-memory log — nothing reads it yet, and it resets
-with the process. Responds `201` with the stored measurement. No session is
-required: the sensor may simply ignore the `_session` cookie the API offers.
+with the process. Responds `201` with the stored measurement.
+
+Requests must carry `Authorization: Bearer <token>`. The expected token comes
+from the `SENSOR_TOKEN` environment variable — in the cluster, mounted from
+the `sensor-token` secret (`token` key; create it with
+`kubectl -n fonduetracker create secret generic sensor-token
+--from-literal=token=<token>`) — and is compared in constant time. With no
+token configured the endpoint rejects every request (fail-closed). No session
+is required: the sensor may simply ignore the `_session` cookie the API offers.
 
 ## Trying it with curl
 
@@ -203,9 +210,11 @@ npm test           # vitest + supertest
 npm run typecheck  # tsc --noEmit
 ```
 
-Environment: `PORT` (default 8080), `FORK_COUNT` (default 8), and
-`NODE_ENV=production` (adds the `Secure` attribute to the cookie — set in the
-k8s deployment).
+Environment: `PORT` (default 8080), `FORK_COUNT` (default 8), `SENSOR_TOKEN`
+(the sensor endpoint's bearer token; unset = the endpoint rejects everything),
+and `NODE_ENV=production` (adds the `Secure` attribute to the cookie — set in
+the k8s deployment, which mounts `SENSOR_TOKEN` from the `sensor-token`
+secret).
 
 The frontend dev server proxies `/api` to this API, so cookies behave the same
 in development as in production.
