@@ -53,3 +53,9 @@ export const FOOD_CATALOG: Food[] = [
 export function findFood(foodId: string): Food | undefined {
     return FOOD_CATALOG.find((food) => food.foodId === foodId)
 }
+
+/** True when prefId is one of the food's preferences in the catalog. */
+export function hasPref(foodId: string, prefId: string): boolean {
+    const food = findFood(foodId)
+    return food !== undefined && food.prefs.some((pref) => pref.id === prefId)
+}

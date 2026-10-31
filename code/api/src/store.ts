@@ -1,3 +1,4 @@
+import { FOOD_CATALOG } from './catalog'
 import type { Fork, Food } from './types'
 
 /** The single dinner this deployment hosts; dinner rooms come later. */
@@ -19,19 +20,12 @@ function cloneFood(food: Food): Food {
     return { ...food, prefs: food.prefs.map((pref) => ({ ...pref })) }
 }
 
-function cloneFork(fork: Fork): Fork {
-    return {
-        ...fork,
-        food: fork.food ? cloneFood(fork.food) : null,
-    }
-}
-
 export type ForkStore = ReturnType<typeof createForkStore>
 
 /**
  * The in-memory dinner: a seeded pool of FORK_COUNT forks, who holds which,
- * and what is on each fork. All mutable state lives here; the session cookie
- * carries identity only.
+ * what is on each fork, and every guest's standing food preferences. All
+ * mutable state lives here; the session cookie carries identity only.
  */
 export function createForkStore() {
     const envCount = Number.parseInt(process.env.FORK_COUNT ?? '', 10)
@@ -45,18 +39,44 @@ export function createForkStore() {
             food: null,
             userName: null,
             userId: null,
+            foodPrefs: null,
             progress: 0,
             color: FORK_COLORS[(i - 1) % FORK_COLORS.length],
         })
     }
 
+    /** Standing food preferences per guest: userId -> foodId -> prefId. */
+    const userPrefs = new Map<string, Map<string, string>>()
+
+    /**
+     * Serializes a fork for responses: a claimed fork carries its holder's
+     * exhaustive preference set (one record per food, catalog order); an
+     * unclaimed fork carries null.
+     */
+    function serialize(fork: Fork): Fork {
+        const clone: Fork = {
+            ...fork,
+            food: fork.food ? cloneFood(fork.food) : null,
+        }
+        if (fork.userId === null) {
+            clone.foodPrefs = null
+            return clone
+        }
+        const prefs = userPrefs.get(fork.userId)
+        clone.foodPrefs = FOOD_CATALOG.map((food) => ({
+            foodId: food.foodId,
+            prefId: prefs?.get(food.foodId) ?? '',
+        }))
+        return clone
+    }
+
     function list(): Fork[] {
-        return [...forks.values()].map(cloneFork)
+        return [...forks.values()].map(serialize)
     }
 
     function get(id: string): Fork | null {
         const fork = forks.get(id)
-        return fork ? cloneFork(fork) : null
+        return fork ? serialize(fork) : null
     }
 
     /** True when the user already holds any fork — one fork per guest. */
@@ -77,7 +97,7 @@ export function createForkStore() {
         }
         fork.userId = userId
         fork.userName = userName
-        return cloneFork(fork)
+        return serialize(fork)
     }
 
     /** Sets or clears the fork's food; null when the fork does not exist. */
@@ -87,8 +107,18 @@ export function createForkStore() {
             return null
         }
         fork.food = food ? cloneFood(food) : null
-        return cloneFork(fork)
+        return serialize(fork)
     }
 
-    return { list, get, holdsFork, assign, setFood }
+    /** Upserts the user's standing preference for one food. */
+    function setPref(userId: string, foodId: string, prefId: string): void {
+        let prefs = userPrefs.get(userId)
+        if (!prefs) {
+            prefs = new Map()
+            userPrefs.set(userId, prefs)
+        }
+        prefs.set(foodId, prefId)
+    }
+
+    return { list, get, holdsFork, assign, setFood, setPref }
 }

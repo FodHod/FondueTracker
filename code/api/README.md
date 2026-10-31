@@ -15,6 +15,7 @@ by an opaque session cookie.
 | `food`     | Food \| null        | What is skewered; `null` = nothing on it          |
 | `userName` | string \| null      | Holder's display name; `null` = unclaimed         |
 | `userId`   | string \| null      | Holder's session id; `null` = unclaimed           |
+| `foodPrefs`| FoodPrefChoice[] \| null | The holder's doneness choice per food; `null` = unclaimed |
 | `progress` | number              | Reserved for doneness tracking; always `0` in v1 |
 | `color`    | string              | Fixed palette color for the UI                    |
 
@@ -24,6 +25,10 @@ A fork whose `userId`/`userName` are `null` is unclaimed and available.
 
 **FoodPreference** — `{ id, name }`: the doneness variants of a food
 (e.g. beef: rare / medium / well done).
+
+**FoodPrefChoice** — `{ foodId, prefId }`: a guest's chosen doneness for one
+food type. Every guest declares exactly one choice per food when claiming and
+can revise them later; the full set rides on their fork in every response.
 
 **User** — has no entity of its own: the `_session` cookie (opaque UUID, HttpOnly)
 is the identity. A `userId` in a request body is always ignored.
@@ -40,41 +45,63 @@ validation of what can go on a fork.
 
 ### GET /api/forks
 
-All forks of the dinner, claimed or not. The fork the session user holds (if
-any) comes first; the rest follow in id order.
+All forks of the dinner as a `Fork[]`, claimed or not. The fork the session
+user holds (if any) comes first; the rest follow in id order. Each claimed
+fork carries its holder's `foodPrefs` — the exhaustive one-choice-per-food
+set, in catalog order. Unclaimed forks have `foodPrefs: null`.
 
 ### POST /api/forks
 
-Claim a fork:
+Claim a fork, declaring your doneness preference for every food:
 
 ```json
-{ "id": "fork-1", "userName": "Alice" }
+{
+  "id": "fork-1",
+  "userName": "Alice",
+  "foodPrefs": [
+    { "foodId": "beef", "prefId": "rare" },
+    { "foodId": "chicken", "prefId": "cooked" },
+    { "foodId": "bread", "prefId": "toasted" },
+    { "foodId": "mushroom", "prefId": "firm" },
+    { "foodId": "pineapple", "prefId": "warm" }
+  ]
+}
 ```
 
 Claims are one-shot and limited to one fork per guest:
 
 - `404` unknown fork
 - `409` the fork is already claimed (even by you), or you already hold a fork
-- `400` missing `id`, or `userName` missing/blank/longer than 30 characters
-  (trimmed first)
+- `400` missing `id`; `userName` missing/blank/longer than 30 characters
+  (trimmed first); `foodPrefs` missing, not exactly one record per food,
+  duplicated, or carrying a `prefId` outside that food's catalog preferences
 
 `userName` is a non-unique display name and cannot be changed after claiming.
 
 ### PUT /api/forks
 
-Set or clear the food of a fork you hold:
+Update the food and/or your food preferences of a fork you hold:
 
 ```json
-{ "id": "fork-1", "food": { "foodId": "beef" } }
+{
+  "id": "fork-1",
+  "food": { "foodId": "beef" },
+  "foodPrefs": [ { "foodId": "beef", "prefId": "medium" } ]
+}
 ```
 
 `"food": null` clears the fork. Only `food.foodId` is read — the food is
 re-hydrated from the catalog, so `foodName`/`prefs` sent by the client are
-ignored. Fields other than `id` and `food` are ignored too.
+ignored. Incoming `foodPrefs` records are merged by `foodId`: send only the
+foods you want to change; the others keep their stored preference. The whole
+request is validated before anything is applied, so a `400` changes nothing.
+Fields other than `id`, `food`, and `foodPrefs` are ignored; a PUT carrying
+neither is rejected.
 
 - `403` you do not hold this fork (unclaimed forks included)
 - `404` unknown fork
-- `400` missing `id`, malformed `food`, or unknown `foodId`
+- `400` missing `id`, malformed `food`, unknown `foodId`, malformed or invalid
+  `foodPrefs`, or an empty PUT
 
 There is deliberately no release or rename endpoint in v1: a claimed fork stays
 claimed until the process restarts.
@@ -86,8 +113,8 @@ browser: `-c cookies.txt` stores the `_session` cookie on first contact and
 `-b cookies.txt` sends it back on every request. The jar is your identity — a
 fresh jar is a new guest, and losing it orphans your fork.
 
-The examples assume the default port 8082; if you started the server with a
-custom `PORT`, adjust the URLs. Every server process holds its own dinner
+The examples use port 8082 (e.g. `PORT=8082 npm run dev`); if your server
+runs elsewhere, adjust the URLs. Every server process holds its own dinner
 state, so a jar saved against one instance does not work against another —
 the claim simply does not exist there.
 
@@ -95,10 +122,10 @@ the claim simply does not exist there.
 # List all forks; this first request also stores your session cookie.
 curl -si -c cookies.txt http://localhost:8082/api/forks
 
-# Claim fork-1 as Alice.
+# Claim fork-1 as Alice, declaring a doneness preference for every food.
 curl -s -b cookies.txt -X POST http://localhost:8082/api/forks \
   -H 'Content-Type: application/json' \
-  -d '{"id": "fork-1", "userName": "Alice"}'
+  -d '{"id":"fork-1","userName":"Alice","foodPrefs":[{"foodId":"beef","prefId":"rare"},{"foodId":"chicken","prefId":"cooked"},{"foodId":"bread","prefId":"toasted"},{"foodId":"mushroom","prefId":"firm"},{"foodId":"pineapple","prefId":"warm"}]}'
 
 # Put beef on your fork (only food.foodId is read).
 curl -s -b cookies.txt -X PUT http://localhost:8082/api/forks \
@@ -110,6 +137,11 @@ curl -s -b cookies.txt -X PUT http://localhost:8082/api/forks \
   -H 'Content-Type: application/json' \
   -d '{"id": "fork-1", "food": null}'
 
+# Change your mind about beef doneness (merged by foodId, other foods untouched).
+curl -s -b cookies.txt -X PUT http://localhost:8082/api/forks \
+  -H 'Content-Type: application/json' \
+  -d '{"id": "fork-1", "foodPrefs": [{"foodId": "beef", "prefId": "medium"}]}'
+
 # List again — your own fork now comes first.
 curl -s -b cookies.txt http://localhost:8082/api/forks
 
@@ -119,7 +151,7 @@ curl -s http://localhost:8082/api/foods
 # Without the jar you are a different guest: someone else's fork -> 409.
 curl -s -X POST http://localhost:8082/api/forks \
   -H 'Content-Type: application/json' \
-  -d '{"id": "fork-1", "userName": "Late"}'
+  -d '{"id":"fork-1","userName":"Late","foodPrefs":[{"foodId":"beef","prefId":"rare"},{"foodId":"chicken","prefId":"cooked"},{"foodId":"bread","prefId":"toasted"},{"foodId":"mushroom","prefId":"firm"},{"foodId":"pineapple","prefId":"warm"}]}'
 ```
 
 ## Development
@@ -131,7 +163,7 @@ npm test           # vitest + supertest
 npm run typecheck  # tsc --noEmit
 ```
 
-Environment: `PORT` (default 8082), `FORK_COUNT` (default 8), and
+Environment: `PORT` (default 8080), `FORK_COUNT` (default 8), and
 `NODE_ENV=production` (adds the `Secure` attribute to the cookie — set in the
 k8s deployment).
 

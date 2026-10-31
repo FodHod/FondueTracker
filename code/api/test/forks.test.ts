@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app'
+import { fullFoodPrefs } from './helpers'
 import type { Fork, Food } from '../src/types'
 
 type Agent = ReturnType<typeof request.agent>
@@ -12,7 +13,7 @@ beforeEach(() => {
 })
 
 async function claim(agent: Agent, forkId: string, userName: string) {
-    return agent.post('/api/forks').send({ id: forkId, userName })
+    return agent.post('/api/forks').send({ id: forkId, userName, foodPrefs: fullFoodPrefs() })
 }
 
 async function setFood(agent: Agent, forkId: string, food: unknown) {
@@ -75,6 +76,7 @@ describe('POST /api/forks (claim)', () => {
             id: 'fork-1',
             userName: 'Alice',
             userId: 'not-my-id',
+            foodPrefs: fullFoodPrefs(),
         })
         expect(res.status).toBe(200)
         const fork = res.body as Fork
@@ -160,7 +162,7 @@ describe('PUT /api/forks (food)', () => {
         expect(typeof res.body.error).toBe('string')
     })
 
-    it('ignores fields other than id and food in the body', async () => {
+    it('ignores fields other than id, food, and foodPrefs in the body', async () => {
         const agent = request.agent(app)
         await claim(agent, 'fork-1', 'Alice')
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app'
+import { fullFoodPrefs } from './helpers'
 import type { Fork } from '../src/types'
 
 describe('session and claim flow', () => {
@@ -28,6 +29,7 @@ describe('session and claim flow', () => {
         expect(cookie).toContain('Path=/')
         expect(cookie).toContain('Max-Age=2592000')
 
+        expect(Array.isArray(res.body)).toBe(true)
         const forks = res.body as Fork[]
         expect(forks).toHaveLength(8)
         expect(forks.map((f) => f.id).sort()).toEqual([
@@ -40,6 +42,7 @@ describe('session and claim flow', () => {
             expect(fork.userId).toBeNull()
             expect(fork.userName).toBeNull()
             expect(fork.food).toBeNull()
+            expect(fork.foodPrefs).toBeNull()
             expect(fork.progress).toBe(0)
         }
     })
@@ -51,7 +54,9 @@ describe('session and claim flow', () => {
         expect(before.status).toBe(200)
         expect((before.body as Fork[]).every((f) => f.userId === null)).toBe(true)
 
-        const claim = await user.post('/api/forks').send({ id: 'fork-1', userName: 'Alice' })
+        const claim = await user
+            .post('/api/forks')
+            .send({ id: 'fork-1', userName: 'Alice', foodPrefs: fullFoodPrefs() })
         expect(claim.status).toBe(200)
         const claimed = claim.body as Fork
         expect(claimed.id).toBe('fork-1')
@@ -67,8 +72,14 @@ describe('session and claim flow', () => {
         expect(held[0].userId).toBe(claimed.userId)
         expect(held[0].dinnerId).toBe('default')
 
+        const prefEntries = after.body as Fork[]
+        expect(prefEntries).toHaveLength(8)
+        expect(held[0].foodPrefs).toEqual(fullFoodPrefs())
+
         const stranger = request.agent(app)
-        const conflict = await stranger.post('/api/forks').send({ id: 'fork-1', userName: 'Bob' })
+        const conflict = await stranger
+            .post('/api/forks')
+            .send({ id: 'fork-1', userName: 'Bob', foodPrefs: fullFoodPrefs() })
         expect(conflict.status).toBe(409)
         expect(typeof conflict.body.error).toBe('string')
     })
@@ -83,8 +94,8 @@ describe('session and claim flow', () => {
         ])
 
         const other = request.agent(app)
-        await other.post('/api/forks').send({ id: 'fork-3', userName: 'Bob' })
-        await user.post('/api/forks').send({ id: 'fork-7', userName: 'Alice' })
+        await other.post('/api/forks').send({ id: 'fork-3', userName: 'Bob', foodPrefs: fullFoodPrefs() })
+        await user.post('/api/forks').send({ id: 'fork-7', userName: 'Alice', foodPrefs: fullFoodPrefs() })
 
         const res = await user.get('/api/forks').set('Accept', 'application/json')
         const ids = (res.body as Fork[]).map((f) => f.id)

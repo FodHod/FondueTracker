@@ -1,13 +1,30 @@
 import { Router } from 'express'
-import { findFood } from '../catalog'
+import { FOOD_CATALOG, findFood, hasPref } from '../catalog'
 import type { ForkStore } from '../store'
-import type { Food } from '../types'
+import type { Food, FoodPrefChoice } from '../types'
 
 const MAX_USER_NAME = 30
 
+/** Parses one { foodId, prefId } record; null when malformed or not in the catalog. */
+function readPrefRecord(value: unknown): FoodPrefChoice | null {
+    if (typeof value !== 'object' || value === null) {
+        return null
+    }
+    const { foodId, prefId } = value as { foodId?: unknown; prefId?: unknown }
+    if (typeof foodId !== 'string' || typeof prefId !== 'string') {
+        return null
+    }
+    if (!hasPref(foodId, prefId)) {
+        return null
+    }
+    return { foodId, prefId }
+}
+
 /**
- * The fork endpoints: list the pool, claim a fork (one-shot, one fork per
- * guest), and set or clear the food on a fork the session holds.
+ * The fork endpoints: list the pool (each fork carrying its holder's food
+ * preferences), claim a fork (one-shot, one fork per guest, full preference
+ * declaration), and update the food and/or preferences of a fork the session
+ * holds.
  */
 export function createForksRouter(store: ForkStore): Router {
     const router = Router()
@@ -43,6 +60,23 @@ export function createForksRouter(store: ForkStore): Router {
             return
         }
 
+        const foodPrefsBody = req.body?.foodPrefs
+        if (!Array.isArray(foodPrefsBody)) {
+            res.status(400).json({ error: 'foodPrefs with one preference per food is required' })
+            return
+        }
+        const parsedPrefs = foodPrefsBody.map(readPrefRecord)
+        if (parsedPrefs.some((pref) => pref === null)) {
+            res.status(400).json({ error: 'foodPrefs must be { foodId, prefId } records from the catalog' })
+            return
+        }
+        const validPrefs = parsedPrefs as FoodPrefChoice[]
+        const foodIds = new Set(validPrefs.map((pref) => pref.foodId))
+        if (validPrefs.length !== FOOD_CATALOG.length || FOOD_CATALOG.some((food) => !foodIds.has(food.foodId))) {
+            res.status(400).json({ error: 'foodPrefs must contain exactly one preference per food' })
+            return
+        }
+
         const fork = store.get(forkId)
         if (!fork) {
             res.status(404).json({ error: `unknown fork: ${forkId}` })
@@ -57,6 +91,9 @@ export function createForksRouter(store: ForkStore): Router {
             return
         }
 
+        for (const pref of validPrefs) {
+            store.setPref(req.userId, pref.foodId, pref.prefId)
+        }
         const claimed = store.assign(forkId, req.userId, userName)
         if (!claimed) {
             res.status(404).json({ error: `unknown fork: ${forkId}` })
@@ -82,28 +119,61 @@ export function createForksRouter(store: ForkStore): Router {
             return
         }
 
+        // Validate the food change (optional) before touching anything.
         const foodBody = req.body?.food
-        let food: Food | null
-        if (foodBody === null) {
-            food = null
-        } else if (typeof foodBody === 'object' && typeof foodBody.foodId === 'string') {
-            const catalogFood = findFood(foodBody.foodId)
-            if (!catalogFood) {
-                res.status(400).json({ error: `unknown food: ${foodBody.foodId}` })
+        let food: Food | null | undefined
+        if (foodBody !== undefined) {
+            if (foodBody === null) {
+                food = null
+            } else if (typeof foodBody === 'object' && typeof foodBody.foodId === 'string') {
+                const catalogFood = findFood(foodBody.foodId)
+                if (!catalogFood) {
+                    res.status(400).json({ error: `unknown food: ${foodBody.foodId}` })
+                    return
+                }
+                food = catalogFood
+            } else {
+                res.status(400).json({ error: 'food must be a catalog food or null' })
                 return
             }
-            food = catalogFood
+        }
+
+        // Validate the preference merge (optional) the same way.
+        const foodPrefsBody = req.body?.foodPrefs
+        let prefChanges: FoodPrefChoice[]
+        if (foodPrefsBody !== undefined) {
+            if (!Array.isArray(foodPrefsBody)) {
+                res.status(400).json({ error: 'foodPrefs must be an array of { foodId, prefId } records' })
+                return
+            }
+            const parsed = foodPrefsBody.map(readPrefRecord)
+            if (parsed.some((pref) => pref === null)) {
+                res.status(400).json({ error: 'foodPrefs must be { foodId, prefId } records from the catalog' })
+                return
+            }
+            prefChanges = parsed as FoodPrefChoice[]
+            const ids = new Set(prefChanges.map((pref) => pref.foodId))
+            if (ids.size !== prefChanges.length) {
+                res.status(400).json({ error: 'foodPrefs must not repeat a food' })
+                return
+            }
         } else {
-            res.status(400).json({ error: 'food must be a catalog food or null' })
+            prefChanges = []
+        }
+
+        if (food === undefined && foodPrefsBody === undefined) {
+            res.status(400).json({ error: 'nothing to update: send food and/or foodPrefs' })
             return
         }
 
-        const updated = store.setFood(forkId, food)
-        if (!updated) {
-            res.status(404).json({ error: `unknown fork: ${forkId}` })
-            return
+        // Everything validated; apply atomically, then respond with fresh state.
+        if (food !== undefined) {
+            store.setFood(forkId, food)
         }
-        res.json(updated)
+        for (const pref of prefChanges) {
+            store.setPref(req.userId, pref.foodId, pref.prefId)
+        }
+        res.json(store.get(forkId) ?? fork)
     })
 
     return router
