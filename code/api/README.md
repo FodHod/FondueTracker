@@ -1,7 +1,7 @@
 # FondueTracker API
 
 Express API that tracks a shared fondue dinner: who holds which fork, what food is
-on it, and — by joining the forks with the pot sensor's measurement log — how done
+on it, and — by joining the forks with the pot sensor's reports — how done
 that food is. State is in-memory (one dinner, reset on restart/redeploy); users are
 identified by an opaque session cookie.
 
@@ -59,22 +59,21 @@ fork carries its holder's `foodPrefs` — the exhaustive one-choice-per-food
 set, in catalog order. Unclaimed forks have `foodPrefs: null`.
 
 This is the only endpoint that computes `progress`. For a claimed fork with
-food on it, the API finds the fork tag's most recent in/out flip in the
-sensor log — the moment it last entered or left the pot — and compares the
-time since that flip with the estimated dipping window for the food and
-the holder's chosen doneness (`src/fondue-math.ts`; the broth temperature
-is hardcoded to 90 °C and does not affect the estimate yet). `progress`
+food on it, the API reads the fork's materialized dip state — when its
+current or last dip started, and when it ended, if the fork has left the
+pot — and compares the dip's elapsed time with the estimated dipping
+window for the food and the holder's chosen doneness
+(`src/fondue-math.ts`; the broth temperature is hardcoded to 90 °C and
+does not affect the estimate yet). While the fork is in the pot the clock
+runs from its insertion; once the fork leaves, `progress` freezes at the
+value the dip had reached, until the fork is dipped again. A tag first
+seen already in the pot counts as inserted at that report. `progress`
 ramps linearly from `0` to `1`, reaching `1.0` — done, safe to eat — at
 the earliest estimated take-out moment, holds `1.0` through the rest of
 the window, and flips to `2` ("too late") once the latest estimate is
-exceeded. It is `0` when there is nothing to track — an unclaimed fork,
-or no flip for it in the log — and the other fork responses (`POST`,
+exceeded. It is `0` when there is nothing to track — an unclaimed fork, no
+food on it, or no dip recorded — and the other fork responses (`POST`,
 `PUT`, `/mine`) return the stored value, which is always `0`.
-
-Known issues in the current progress model:
-
-- The flip used as the cooking start is the most recent one even when the
-  fork has left the pot: time out of the pot keeps accruing toward `2`.
 
 ### POST /api/forks
 
@@ -147,10 +146,12 @@ named in the path (the frontend's four endpoints are unaffected):
 ```
 
 `time` and `temperature` must be numbers, `tags` an array of `{ id, in_pot }`
-records (possibly empty); extra fields are ignored. The measurement is
-appended to that dinner's in-memory log — `GET /api/forks` reads it to time
-each fork's dips — and it resets with the process. Responds `201` with the
-stored measurement.
+records (possibly empty); extra fields are ignored. Each report folds into
+that dinner's materialized dip state — per fork, when its current or last
+dip started and ended, and the broth temperature it started at — which
+`GET /api/forks` reads to time each fork's dips. No measurement history is
+kept, and the state resets with the process. Responds `201` with the
+measurement.
 
 Requests must carry `Authorization: Bearer <token>`. The expected token comes
 from the `SENSOR_TOKEN` environment variable — in the cluster, mounted from

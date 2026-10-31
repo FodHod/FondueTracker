@@ -133,68 +133,80 @@ export function createForkStore() {
     return { list, get, forUser, holdsFork, assign, setFood, setPref }
 }
 
-function cloneMeasurement(m: SensorMeasurement): SensorMeasurement {
-    return { time: m.time, temperature: m.temperature, tags: m.tags.map((tag) => ({ ...tag })) }
+/** The materialized dip state of one fork in one dinner. */
+export type DipState = {
+    /** The fork's status in the latest report that covered it. */
+    inPot: boolean
+    /** Start of the current or most recent dip (ms); null before the first insertion. */
+    insertedAt: number | null
+    /** End of the most recent dip (ms); null while the dip is running. */
+    removedAt: number | null
+    /** Broth temperature at the start of the current or most recent dip. */
+    tempAtInsertC: number | null
 }
 
 export type SensorStore = ReturnType<typeof createSensorStore>
 
 /**
- * The in-memory sensor log: an append-only list of measurements per dinner,
- * keyed by the dinnerId in the sensor route path. Resets with the process;
- * deliberately unbounded — a dinner is hours, not weeks.
+ * The pot sensor's materialized state: per dinner and fork, only the dip
+ * facts progress needs — when the current or last dip started, when it
+ * ended, and the broth temperature it started at. Reports fold into this
+ * state machine in place; no measurement history is kept. Resets with the
+ * process.
  */
 export function createSensorStore() {
-    const log = new Map<string, SensorMeasurement[]>()
+    const dinners = new Map<string, Map<string, DipState>>()
 
-    /**
-     * Check if the specific fork is in the pot at the given measurement
-     * @param measurement
-     * @param forkId
-     */
-    function getStatusForForkId(measurement: SensorMeasurement, forkId: string): boolean {
-        const forkState = measurement.tags.filter(tag => `fork-${tag.id}` === forkId);
-        return forkState.length > 0 && forkState[0].in_pot;
-    }
-
-    /**
-     * Get the time at which the fork flipped from in_pot=true to in_pot=false or vice-versa.
-     * @param forkId The id of the fork.
-     * @param dinner The id of the dinner.
-     */
-    function getFlipTime(forkId: string, dinner: string): { insertedInPot: boolean, flipTime: Date } | null {
-        const events = log.get(dinner);
-        if (!events) {
-            return null;
+    /** Stamps the dip boundary a status change crosses. */
+    function transition(rec: DipState, inPot: boolean, timeMs: number, tempC: number): void {
+        if (rec.inPot === inPot) {
+            return
         }
-
-        const tagId = forkId;
-        const newestStatus = getStatusForForkId(events[events.length - 1], tagId);
-        for (let i = events.length - 1; i >= 0; i--) {
-            const event = events[i];
-            const currentStatus = getStatusForForkId(event, tagId);
-            if (newestStatus !== currentStatus) {
-                return { insertedInPot: newestStatus, flipTime: new Date(event.time) };
-            }
-        }
-
-        return null;
-    }
-
-    /** Appends a copy of the measurement to the dinner's log. */
-    function append(dinnerId: string, measurement: SensorMeasurement): void {
-        const entries = log.get(dinnerId)
-        if (entries) {
-            entries.push(cloneMeasurement(measurement))
+        rec.inPot = inPot
+        if (inPot) {
+            rec.insertedAt = timeMs
+            rec.removedAt = null
+            rec.tempAtInsertC = tempC
         } else {
-            log.set(dinnerId, [cloneMeasurement(measurement)])
+            rec.removedAt = timeMs
         }
     }
 
-    /** The dinner's measurements, oldest first, as copies. */
-    function list(dinnerId: string): SensorMeasurement[] {
-        return (log.get(dinnerId) ?? []).map(cloneMeasurement)
+    /** Folds one report into the dinner's state. */
+    function append(dinnerId: string, measurement: SensorMeasurement): void {
+        let records = dinners.get(dinnerId)
+        if (!records) {
+            records = new Map()
+            dinners.set(dinnerId, records)
+        }
+        const { time, temperature, tags } = measurement
+
+        // A tag absent from a report reads as out of the pot.
+        for (const [forkId, rec] of records) {
+            const tag = tags.find((t) => `fork-${t.id}` === forkId)
+            transition(rec, tag ? tag.in_pot : false, time, temperature)
+        }
+
+        // A tag first seen already in the pot counts as inserted at that report.
+        for (const tag of tags) {
+            const forkId = `fork-${tag.id}`
+            if (records.has(forkId)) {
+                continue
+            }
+            records.set(forkId, {
+                inPot: tag.in_pot,
+                insertedAt: tag.in_pot ? time : null,
+                removedAt: null,
+                tempAtInsertC: tag.in_pot ? temperature : null,
+            })
+        }
     }
 
-    return { append, list, getFlipTime };
+    /** The fork's dip state in that dinner, as a copy; null when unknown. */
+    function getDipState(forkId: string, dinnerId: string): DipState | null {
+        const rec = dinners.get(dinnerId)?.get(forkId)
+        return rec ? { ...rec } : null
+    }
+
+    return { append, getDipState }
 }

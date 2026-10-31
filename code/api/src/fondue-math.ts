@@ -124,8 +124,8 @@ function adjust_cooking_range(min_time: number, max_time: number, broth_temp_C: 
     return [min_time, max_time];
 }
 
-export function fondueInfo(meat: string, doneness: string, broth_temp_C: number, start_ts: Date) {
-    const now = new Date();
+export function fondueInfo(meat: string, doneness: string, broth_temp_C: number, start_ts: Date, asOf?: Date) {
+    const now = asOf ?? new Date();
     meat = meat.toLowerCase().trim();
     doneness = doneness.toLowerCase().trim();
 

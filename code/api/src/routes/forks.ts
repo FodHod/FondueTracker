@@ -42,15 +42,17 @@ export function createForksRouter(store: ForkStore, sensorStore: SensorStore): R
                     };
                 }
                 const prefsForFood = fork.foodPrefs.filter((pref) => pref.foodId === fork.food?.foodId);
-                // TODO: temperature should come from the sensor
-                const startTs = sensorStore.getFlipTime(fork.id, fork.dinnerId);
-                if (!startTs || !fork.food) {
+                // TODO: temperature should come from the sensor (dip.tempAtInsertC)
+                const dip = sensorStore.getDipState(fork.id, fork.dinnerId);
+                if (!dip || dip.insertedAt === null || !fork.food) {
                     return {
                         ...fork,
                         progress: 0,
                     };
                 }
-                const forkInfo = fondueInfo(fork.food.foodId, prefsForFood.length > 0 ? prefsForFood[0].prefId : fork.food.prefs[0].id, 90, startTs.flipTime)
+                // A removed fork is judged at its removal: progress freezes there.
+                const asOf = dip.removedAt !== null ? new Date(dip.removedAt) : undefined;
+                const forkInfo = fondueInfo(fork.food.foodId, prefsForFood.length > 0 ? prefsForFood[0].prefId : fork.food.prefs[0].id, 90, new Date(dip.insertedAt), asOf)
                 return { ...fork, progress: forkInfo.progress };
             });
         forks.sort((a, b) => {
