@@ -3,7 +3,7 @@
 A short, clear description of what your project does and who it helps.
 
 ## The Problem
-Everyday people fight with overcooked Fondue Chinoise meat or worse: get food poison eating undercooked one. Aside from health hazards and potential food waste, friendships get destroyed and Christmas for families of all parts of Switzerland ruined. 
+Everyday people fight with overcooked Fondue Chinoise meat or worse: get food poisoning eating an undercooked one. Aside from health hazards and potential food waste, friendships get destroyed and Christmas is ruined for families in all parts of Switzerland.
 
 ## Our Solution
 Our solution is simple and non-intrusive. Achieving XXX% accuracy in predicting when YOUR piece of meat is done.
