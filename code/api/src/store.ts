@@ -7,11 +7,11 @@ const DEFAULT_DINNER_ID = 'default'
 /** Fixed palette for the seeded pool; fork i wears palette color (i - 1) % length. */
 const FORK_COLORS = [
     '#e63946', // red
-    '#f4a261', // orange
+    '#BB8151', // orange
     '#ffd166', // yellow
-    '#06d6a0', // green
+    '#62BB8F', // green
     '#118ab2', // blue
-    '#7b2cbf', // purple
+    '#ABA9DC', // purple
     '#ff70a6', // pink
     '#3d3d3d', // graphite
 ]
