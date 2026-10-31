@@ -123,10 +123,10 @@ def camera_frames(source: str):
         finally:
             cap.release()
 
-x_min = 200
-x_max = 600
-y_min = 200
-y_max = 600
+x_min = 300
+x_max = 1400
+y_min = 100
+y_max = 700
 def is_in_pot(tag):
     x, y = tag["x"], tag["y"]
     in_pot = x_min < x < x_max and y_min < y < y_max
