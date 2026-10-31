@@ -25,6 +25,9 @@ spec:
         ports:
         - name: http
           containerPort: 8080
+        env:
+        - name: NODE_ENV
+          value: production
         resources:
           limits:
             cpu: 1
