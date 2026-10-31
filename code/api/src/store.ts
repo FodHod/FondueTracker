@@ -1,5 +1,5 @@
 import { FOOD_CATALOG } from './catalog'
-import type { Fork, Food, SensorMeasurement } from './types'
+import type {Fork, Food, SensorMeasurement} from './types'
 
 /** The single dinner this deployment hosts; dinner rooms come later. */
 const DEFAULT_DINNER_ID = 'default'
@@ -147,6 +147,40 @@ export type SensorStore = ReturnType<typeof createSensorStore>
 export function createSensorStore() {
     const log = new Map<string, SensorMeasurement[]>()
 
+    /**
+     * Check if the specific fork is in the pot at the given measurement
+     * @param measurement
+     * @param forkId
+     */
+    function getStatusForForkId(measurement: SensorMeasurement, forkId: string): boolean {
+        const forkState = measurement.tags.filter(tag => `fork-${tag.id}` === forkId);
+        return forkState.length > 0 && forkState[0].in_pot;
+    }
+
+    /**
+     * Get the time at which the fork flipped from in_pot=true to in_pot=false or vice-versa.
+     * @param forkId The id of the fork.
+     * @param dinner The id of the dinner.
+     */
+    function getFlipTime(forkId: string, dinner: string): { insertedInPot: boolean, flipTime: Date } | null {
+        const events = log.get(dinner);
+        if (!events) {
+            return null;
+        }
+
+        const tagId = forkId;
+        const newestStatus = getStatusForForkId(events[events.length - 1], tagId);
+        for (let i = events.length - 1; i >= 0; i--) {
+            const event = events[i];
+            const currentStatus = getStatusForForkId(event, tagId);
+            if (newestStatus !== currentStatus) {
+                return { insertedInPot: newestStatus, flipTime: new Date(event.time) };
+            }
+        }
+
+        return null;
+    }
+
     /** Appends a copy of the measurement to the dinner's log. */
     function append(dinnerId: string, measurement: SensorMeasurement): void {
         const entries = log.get(dinnerId)
@@ -162,5 +196,5 @@ export function createSensorStore() {
         return (log.get(dinnerId) ?? []).map(cloneMeasurement)
     }
 
-    return { append, list }
+    return { append, list, getFlipTime };
 }
