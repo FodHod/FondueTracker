@@ -44,14 +44,13 @@ export function createForksRouter(store: ForkStore, sensorStore: SensorStore): R
                 const prefsForFood = fork.foodPrefs.filter((pref) => pref.foodId === fork.food?.foodId);
                 // TODO: temperature should come from the sensor
                 const startTs = sensorStore.getFlipTime(fork.id, fork.dinnerId);
-                console.log(`fork ${fork.id} flipTime: ${startTs?.flipTime}`);
-                if (!startTs) {
+                if (!startTs || !fork.food) {
                     return {
                         ...fork,
                         progress: 0,
                     };
                 }
-                const forkInfo = fondueInfo(fork.food!.foodId, prefsForFood.length > 0 ? prefsForFood[0].prefId : fork.food!.prefs[0].id, 90, startTs!.flipTime)
+                const forkInfo = fondueInfo(fork.food.foodId, prefsForFood.length > 0 ? prefsForFood[0].prefId : fork.food.prefs[0].id, 90, startTs.flipTime)
                 return { ...fork, progress: forkInfo.progress };
             });
         forks.sort((a, b) => {

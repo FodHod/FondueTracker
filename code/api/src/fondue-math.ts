@@ -146,11 +146,24 @@ export function fondueInfo(meat: string, doneness: string, broth_temp_C: number,
         broth_temp_C,
     );
 
-    const [earliest_out, latest_out] = [start_ts.getTime() + adjusted_low, start_ts.getTime() + adjusted_high];
+    const start_ms = start_ts.getTime()
+    const now_ms = now.getTime()
 
-    let progress = (now.getTime() - start_ts.getTime()) / ((latest_out - earliest_out)*1000);
-    if (progress > 1) {
-        progress = 2; // more than 1 is too late. 2 corresponds to too late.
+    // The estimates are seconds; the clocks are milliseconds.
+    const earliest_out_ms = start_ms + adjusted_low * 1000
+    const latest_out_ms = start_ms + adjusted_high * 1000
+    const elapsed_ms = Math.max(0, now_ms - start_ms)
+
+    let progress: number
+    if (now_ms <= earliest_out_ms) {
+        // Ramps linearly, reaching 1.0 at the earliest estimated take-out.
+        progress = earliest_out_ms > start_ms ? elapsed_ms / (earliest_out_ms - start_ms) : 1
+    } else if (now_ms <= latest_out_ms) {
+        // Inside the estimated window: done, safe to eat.
+        progress = 1
+    } else {
+        // Past the latest estimated take-out: too late.
+        progress = 2
     }
 
     return {

@@ -3,7 +3,9 @@ import type { Food } from './types'
 /**
  * The foods the dinner offers, each with the doneness preferences a guest
  * can pick. Single source of truth for GET /api/foods and for validating
- * the food a client PUTs onto a fork.
+ * the food a client PUTs onto a fork. The ids mirror the doneness tables in
+ * src/fondue-math.ts exactly, so every claimable (foodId, prefId) pair has
+ * a progress model behind it; test/fondue-math.test.ts pins that invariant.
  */
 export const FOOD_CATALOG: Food[] = [
     {
@@ -11,41 +13,50 @@ export const FOOD_CATALOG: Food[] = [
         foodName: 'Beef',
         prefs: [
             { id: 'rare', name: 'Rare' },
+            { id: 'medium-rare', name: 'Medium rare' },
             { id: 'medium', name: 'Medium' },
-            { id: 'well', name: 'Well done' },
+            { id: 'medium-well', name: 'Medium well' },
+            { id: 'well-done', name: 'Well done' },
+        ],
+    },
+    {
+        foodId: 'lamb',
+        foodName: 'Lamb',
+        prefs: [
+            { id: 'rare', name: 'Rare' },
+            { id: 'medium-rare', name: 'Medium rare' },
+            { id: 'medium', name: 'Medium' },
+            { id: 'medium-well', name: 'Medium well' },
+            { id: 'well-done', name: 'Well done' },
+        ],
+    },
+    {
+        foodId: 'veal',
+        foodName: 'Veal',
+        prefs: [
+            { id: 'medium', name: 'Medium' },
+            { id: 'well-done', name: 'Well done' },
+        ],
+    },
+    {
+        foodId: 'pork',
+        foodName: 'Pork',
+        prefs: [
+            { id: 'fully-cooked', name: 'Fully cooked' },
         ],
     },
     {
         foodId: 'chicken',
         foodName: 'Chicken',
         prefs: [
-            { id: 'cooked', name: 'Fully cooked' },
-            { id: 'crispy', name: 'Extra crispy' },
+            { id: 'fully-cooked', name: 'Fully cooked' },
         ],
     },
     {
-        foodId: 'bread',
-        foodName: 'Bread',
+        foodId: 'turkey',
+        foodName: 'Turkey',
         prefs: [
-            { id: 'toasted', name: 'Lightly toasted' },
-            { id: 'golden', name: 'Golden' },
-            { id: 'crunchy', name: 'Crunchy' },
-        ],
-    },
-    {
-        foodId: 'mushroom',
-        foodName: 'Mushroom',
-        prefs: [
-            { id: 'firm', name: 'Firm' },
-            { id: 'soft', name: 'Soft' },
-        ],
-    },
-    {
-        foodId: 'pineapple',
-        foodName: 'Pineapple',
-        prefs: [
-            { id: 'warm', name: 'Warm' },
-            { id: 'caramelized', name: 'Caramelized' },
+            { id: 'fully-cooked', name: 'Fully cooked' },
         ],
     },
 ]

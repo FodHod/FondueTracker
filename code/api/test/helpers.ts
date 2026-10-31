@@ -7,9 +7,10 @@ import type { FoodPrefChoice } from '../src/types'
 export function fullFoodPrefs(): FoodPrefChoice[] {
     return [
         { foodId: 'beef', prefId: 'rare' },
-        { foodId: 'chicken', prefId: 'cooked' },
-        { foodId: 'bread', prefId: 'toasted' },
-        { foodId: 'mushroom', prefId: 'firm' },
-        { foodId: 'pineapple', prefId: 'warm' },
+        { foodId: 'lamb', prefId: 'medium-rare' },
+        { foodId: 'veal', prefId: 'medium' },
+        { foodId: 'pork', prefId: 'fully-cooked' },
+        { foodId: 'chicken', prefId: 'fully-cooked' },
+        { foodId: 'turkey', prefId: 'fully-cooked' },
     ]
 }

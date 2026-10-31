@@ -10,7 +10,7 @@ describe('GET /api/foods', () => {
         expect(res.status).toBe(200)
         const foods = res.body as Food[]
         expect(foods.map((f) => f.foodId).sort()).toEqual([
-            'beef', 'bread', 'chicken', 'mushroom', 'pineapple',
+            'beef', 'chicken', 'lamb', 'pork', 'turkey', 'veal',
         ])
     })
 

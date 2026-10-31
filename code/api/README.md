@@ -1,8 +1,9 @@
 # FondueTracker API
 
-Express API that tracks a shared fondue dinner: who holds which fork and what food is
-on it. State is in-memory (one dinner, reset on restart/redeploy); users are identified
-by an opaque session cookie.
+Express API that tracks a shared fondue dinner: who holds which fork, what food is
+on it, and — by joining the forks with the pot sensor's measurement log — how done
+that food is. State is in-memory (one dinner, reset on restart/redeploy); users are
+identified by an opaque session cookie.
 
 ## Entities
 
@@ -16,7 +17,7 @@ by an opaque session cookie.
 | `userName` | string \| null      | Holder's display name; `null` = unclaimed         |
 | `userId`   | string \| null      | Holder's session id; `null` = unclaimed           |
 | `foodPrefs`| FoodPrefChoice[] \| null | The holder's doneness choice per food; `null` = unclaimed |
-| `progress` | number              | Reserved for doneness tracking; always `0` in v1 |
+| `progress` | number              | Cooking progress; `1` = safe to eat, `2` = too late |
 | `color`    | string              | Fixed palette color for the UI                    |
 
 A fork whose `userId`/`userName` are `null` is unclaimed and available.
@@ -24,7 +25,7 @@ A fork whose `userId`/`userName` are `null` is unclaimed and available.
 **Food** — `{ foodId, foodName, prefs }`: one entry per food the dinner offers.
 
 **FoodPreference** — `{ id, name }`: the doneness variants of a food
-(e.g. beef: rare / medium / well done).
+(e.g. beef: rare / medium-rare / medium / medium-well / well-done).
 
 **FoodPrefChoice** — `{ foodId, prefId }`: a guest's chosen doneness for one
 food type. Every guest declares exactly one choice per food when claiming and
@@ -46,7 +47,9 @@ Responses are JSON; errors are `{ "error": "message" }`.
 ### GET /api/foods
 
 The food catalog — the single source of truth for the UI pickers and for the
-validation of what can go on a fork.
+validation of what can go on a fork. Its foods and preference ids mirror the
+doneness tables in `src/fondue-math.ts`, so every claimable combination has
+a progress model behind it.
 
 ### GET /api/forks
 
@@ -54,6 +57,24 @@ All forks of the dinner as a `Fork[]`, claimed or not. The fork the session
 user holds (if any) comes first; the rest follow in id order. Each claimed
 fork carries its holder's `foodPrefs` — the exhaustive one-choice-per-food
 set, in catalog order. Unclaimed forks have `foodPrefs: null`.
+
+This is the only endpoint that computes `progress`. For a claimed fork with
+food on it, the API finds the fork tag's most recent in/out flip in the
+sensor log — the moment it last entered or left the pot — and compares the
+time since that flip with the estimated dipping window for the food and
+the holder's chosen doneness (`src/fondue-math.ts`; the broth temperature
+is hardcoded to 90 °C and does not affect the estimate yet). `progress`
+ramps linearly from `0` to `1`, reaching `1.0` — done, safe to eat — at
+the earliest estimated take-out moment, holds `1.0` through the rest of
+the window, and flips to `2` ("too late") once the latest estimate is
+exceeded. It is `0` when there is nothing to track — an unclaimed fork,
+or no flip for it in the log — and the other fork responses (`POST`,
+`PUT`, `/mine`) return the stored value, which is always `0`.
+
+Known issues in the current progress model:
+
+- The flip used as the cooking start is the most recent one even when the
+  fork has left the pot: time out of the pot keeps accruing toward `2`.
 
 ### POST /api/forks
 
@@ -65,10 +86,11 @@ Claim a fork, declaring your doneness preference for every food:
   "userName": "Alice",
   "foodPrefs": [
     { "foodId": "beef", "prefId": "rare" },
-    { "foodId": "chicken", "prefId": "cooked" },
-    { "foodId": "bread", "prefId": "toasted" },
-    { "foodId": "mushroom", "prefId": "firm" },
-    { "foodId": "pineapple", "prefId": "warm" }
+    { "foodId": "lamb", "prefId": "medium-rare" },
+    { "foodId": "veal", "prefId": "medium" },
+    { "foodId": "pork", "prefId": "fully-cooked" },
+    { "foodId": "chicken", "prefId": "fully-cooked" },
+    { "foodId": "turkey", "prefId": "fully-cooked" }
   ]
 }
 ```
@@ -126,8 +148,9 @@ named in the path (the frontend's four endpoints are unaffected):
 
 `time` and `temperature` must be numbers, `tags` an array of `{ id, in_pot }`
 records (possibly empty); extra fields are ignored. The measurement is
-appended to that dinner's in-memory log — nothing reads it yet, and it resets
-with the process. Responds `201` with the stored measurement.
+appended to that dinner's in-memory log — `GET /api/forks` reads it to time
+each fork's dips — and it resets with the process. Responds `201` with the
+stored measurement.
 
 Requests must carry `Authorization: Bearer <token>`. The expected token comes
 from the `SENSOR_TOKEN` environment variable — in the cluster, mounted from
@@ -165,10 +188,11 @@ curl -s -c cookies.txt http://localhost:8082/api/forks | jq
 # Claim the fork as Alice, declaring a doneness preference for every food.
 CLAIM=$(jq -nc --arg id "$FORK" '{id: $id, userName: "Alice", foodPrefs: [
   {foodId: "beef", prefId: "rare"},
-  {foodId: "chicken", prefId: "cooked"},
-  {foodId: "bread", prefId: "toasted"},
-  {foodId: "mushroom", prefId: "firm"},
-  {foodId: "pineapple", prefId: "warm"}]}')
+  {foodId: "lamb", prefId: "medium-rare"},
+  {foodId: "veal", prefId: "medium"},
+  {foodId: "pork", prefId: "fully-cooked"},
+  {foodId: "chicken", prefId: "fully-cooked"},
+  {foodId: "turkey", prefId: "fully-cooked"}]}')
 curl -s -b cookies.txt -c cookies.txt -X POST http://localhost:8082/api/forks \
   -H 'Content-Type: application/json' -d "$CLAIM" | jq
 
