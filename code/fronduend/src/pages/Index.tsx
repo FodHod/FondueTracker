@@ -139,7 +139,7 @@ export default function Index() {
                                 <div
                                     className="mt-3 h-4 w-full overflow-hidden rounded-full border-2 border-text-main bg-bg">
                                     <div
-                                        className={`h-full transition-all duration-500 ease-out ${
+                                        className={`h-full transition-all duration-1000 ease-out ${
                                             isOvercooked ? "overcooked-bar" : ""
                                         }`}
                                         style={{
