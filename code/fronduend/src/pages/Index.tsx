@@ -3,13 +3,14 @@ import {useEffect, useState} from "react";
 import api from "../api/api.ts";
 import logo from "../assets/images/caquelon-logo.png";
 
-function getForkQuip(progressPct: number, inPot: boolean) {
+function getForkQuip(progressPct: number, inPot: boolean, isOvercooked: boolean) {
+    if (isOvercooked) return "Overcooking! Pull it out now!";
     if (!inPot && progressPct <= 0) return "Chilling outside the pot";
     if (progressPct <= 0) return "Just dipped in the pot";
     if (progressPct < 30) return "Just dipped! Barely warm";
     if (progressPct < 70) return "Getting nice & sizzly...";
     if (progressPct < 100) return "Almost ready! Open wide";
-    return "Done";
+    return "Done! Ready to eat";
 }
 
 export default function Index() {
@@ -50,17 +51,31 @@ export default function Index() {
             ) : (
                 <div className="flex flex-col gap-4">
                     {activeForks.map(fork => {
-                        const pct = Math.min(100, Math.max(0, Math.floor(fork.progress * 100)));
-                        const isDone = pct >= 100;
+                        const rawPct = Math.floor(fork.progress * 100);
+                        const pct = Math.min(100, Math.max(0, rawPct));
+                        const isOvercooked = fork.progress > 1;
+                        const isDone = pct >= 100 && !isOvercooked;
                         const forkColor = fork.color || "var(--color-primary)";
 
                         return (
                             <div
                                 key={fork.id}
-                                className={`cartoon-card p-4 transition-transform ${
-                                    isDone ? "animate-wiggle bg-tertiary/25" : ""
+                                className={`cartoon-card relative p-4 transition-transform ${
+                                    isOvercooked
+                                        ? "animate-sizzle bg-primary/20"
+                                        : isDone
+                                          ? "animate-wiggle bg-green/20"
+                                          : ""
                                 }`}
                             >
+                                {isOvercooked && (
+                                    <div className="pointer-events-none absolute -top-3 right-6 flex gap-1.5">
+                                        <span className="smoke-puff h-3 w-3 rounded-full border-2 border-text-main bg-border" />
+                                        <span className="smoke-puff-delay-1 h-4 w-4 rounded-full border-2 border-text-main bg-border" />
+                                        <span className="smoke-puff-delay-2 h-2.5 w-2.5 rounded-full border-2 border-text-main bg-border" />
+                                    </div>
+                                )}
+
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2.5">
                                         <span
@@ -73,25 +88,30 @@ export default function Index() {
                                     </div>
                                     <span
                                         className="rounded-full border-2 border-text-main px-2.5 py-0.5 text-sm font-bold shadow-[2px_2px_0px_#3D2D23]"
-                                        style={{backgroundColor: forkColor, color: "#3D2D23"}}
+                                        style={{
+                                            backgroundColor: isOvercooked ? "var(--color-text-main)" : forkColor,
+                                            color: isOvercooked ? "var(--color-bg)" : "#3D2D23",
+                                        }}
                                     >
-                                        {pct}%
+                                        {isOvercooked ? "OVERCOOKED" : `${pct}%`}
                                     </span>
                                 </div>
 
                                 <div
                                     className="mt-3 h-4 w-full overflow-hidden rounded-full border-2 border-text-main bg-bg">
                                     <div
-                                        className="h-full transition-all duration-500 ease-out"
+                                        className={`h-full transition-all duration-500 ease-out ${
+                                            isOvercooked ? "overcooked-bar" : ""
+                                        }`}
                                         style={{
                                             width: `${pct}%`,
-                                            backgroundColor: forkColor,
+                                            backgroundColor: isOvercooked ? undefined : forkColor,
                                         }}
                                     />
                                 </div>
 
-                                <p className="mt-2 text-xs font-medium text-text-muted">
-                                    {getForkQuip(pct, fork.inPot)}
+                                <p className={`mt-2 text-xs font-medium ${isOvercooked ? "font-bold text-text-main" : "text-text-muted"}`}>
+                                    {getForkQuip(pct, fork.inPot, isOvercooked)}
                                     {fork.food?.foodName ? ` • Cooking ${fork.food.foodName}` : ""}
                                 </p>
                             </div>
