@@ -34,13 +34,12 @@ export default function Index() {
 
     const updateForkProgress = () => {
         api.getForks().then(res => setForks(res.data))
+        api.getMyFork()
+            .then(res => setMyFork(res.data?.userName ? res.data : undefined))
+            .catch(() => setMyFork(undefined))
     }
 
     useEffect(() => {
-        api.getMyFork().then(res => {
-            if (res.status == 200) setMyFork(res.data);
-        }).catch(() => {
-        })
         updateForkProgress();
         const interval = setInterval(updateForkProgress, 1000);
         return () => clearInterval(interval);
@@ -61,6 +60,17 @@ export default function Index() {
                 <p className="mt-1 inline-block -rotate-1 rounded-full border-2 border-text-main bg-tertiary px-3 py-0.5 text-xs font-semibold shadow-[2px_2px_0px_#3D2D23]">
                     Live Caquelon Surveillance
                 </p>
+                {myFork?.userName && (
+                    <p
+                        className="mt-3 rounded-full border-2 border-text-main px-3 py-1 text-sm font-bold shadow-[2px_2px_0px_#3D2D23]"
+                        style={{
+                            backgroundColor: myFork.color || "#F08E76",
+                            color: getContrastTextColor(myFork.color || "#F08E76"),
+                        }}
+                    >
+                        {myFork.userName}
+                    </p>
+                )}
             </header>
 
             {activeForks.length === 0 ? (
