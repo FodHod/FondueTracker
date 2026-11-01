@@ -46,7 +46,9 @@ export default function Index() {
         return () => clearInterval(interval);
     }, [])
 
-    const activeForks = forks.filter(fork => fork.userName && fork.inPot);
+    const activeForks = forks
+        .filter(fork => fork.userName && fork.inPot)
+        .sort((a, b) => a.progress - b.progress);
 
     return (
         <main className="mx-auto max-w-md px-4 pt-6 pb-8">
