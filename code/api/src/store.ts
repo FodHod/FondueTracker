@@ -1,6 +1,6 @@
-import { FOOD_CATALOG } from './catalog'
-import { logger } from './logger'
-import type {Fork, Food, SensorMeasurement} from './types'
+import {FOOD_CATALOG} from './catalog'
+import {logger} from './logger'
+import type {Food, Fork, SensorMeasurement} from './types'
 
 /** The single dinner this deployment hosts; dinner rooms come later. */
 const DEFAULT_DINNER_ID = 'default'
@@ -8,17 +8,17 @@ const DEFAULT_DINNER_ID = 'default'
 /** Fixed palette for the seeded pool; fork i wears palette color (i - 1) % length. */
 const FORK_COLORS = [
     '#e63946', // red
-    '#BB8151', // orange
+    '#ff70a6', // pink
     '#ffd166', // yellow
     '#62BB8F', // green
     '#118ab2', // blue
     '#ABA9DC', // purple
-    '#ff70a6', // pink
+    '#BB8151', // orange
     '#3d3d3d', // graphite
 ]
 
 function cloneFood(food: Food): Food {
-    return { ...food, prefs: food.prefs.map((pref) => ({ ...pref })) }
+    return {...food, prefs: food.prefs.map((pref) => ({...pref}))}
 }
 
 export type ForkStore = ReturnType<typeof createForkStore>
@@ -150,7 +150,7 @@ export function createForkStore() {
         prefs.set(foodId, prefId)
     }
 
-    return { list, get, forUser, holdsFork, assign, release, setFood, setPref }
+    return {list, get, forUser, holdsFork, assign, release, setFood, setPref}
 }
 
 /** The materialized dip state of one fork in one dinner. */
@@ -187,10 +187,10 @@ export function createSensorStore() {
             rec.insertedAt = timeMs
             rec.removedAt = null
             rec.tempAtInsertC = tempC
-            logger.info('fork dipped', { forkId, at: new Date(timeMs).toISOString() })
+            logger.info('fork dipped', {forkId, at: new Date(timeMs).toISOString()})
         } else {
             rec.removedAt = timeMs
-            logger.info('fork removed', { forkId, at: new Date(timeMs).toISOString() })
+            logger.info('fork removed', {forkId, at: new Date(timeMs).toISOString()})
         }
     }
 
@@ -201,7 +201,7 @@ export function createSensorStore() {
             records = new Map()
             dinners.set(dinnerId, records)
         }
-        const { time, temperature, tags } = measurement
+        const {time, temperature, tags} = measurement
 
         // A tag absent from a report reads as out of the pot.
         for (const [forkId, rec] of records) {
@@ -222,7 +222,7 @@ export function createSensorStore() {
                 tempAtInsertC: tag.in_pot ? temperature : null,
             })
             if (tag.in_pot) {
-                logger.info('fork dipped', { forkId, at: new Date(time).toISOString() })
+                logger.info('fork dipped', {forkId, at: new Date(time).toISOString()})
             }
         }
     }
@@ -230,7 +230,7 @@ export function createSensorStore() {
     /** The fork's dip state in that dinner, as a copy; null when unknown. */
     function getDipState(forkId: string, dinnerId: string): DipState | null {
         const rec = dinners.get(dinnerId)?.get(forkId)
-        return rec ? { ...rec } : null
+        return rec ? {...rec} : null
     }
 
     /**
@@ -254,8 +254,8 @@ export function createSensorStore() {
             rec.removedAt = null
             rec.tempAtInsertC = null
         }
-        logger.info('dip re-baselined for a new food', { forkId, inPot, at: new Date(timeMs).toISOString() })
+        logger.info('dip re-baselined for a new food', {forkId, inPot, at: new Date(timeMs).toISOString()})
     }
 
-    return { append, getDipState, restartDip }
+    return {append, getDipState, restartDip}
 }
