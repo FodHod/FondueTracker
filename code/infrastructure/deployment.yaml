@@ -28,6 +28,8 @@ spec:
         env:
         - name: NODE_ENV
           value: production
+        - name: FORK_COUNT
+          value: "6"
         - name: SENSOR_TOKEN
           valueFrom:
             secretKeyRef:
