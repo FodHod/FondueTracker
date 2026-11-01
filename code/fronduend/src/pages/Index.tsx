@@ -30,18 +30,23 @@ function getContrastTextColor(bgColor: string): string {
 
 export default function Index() {
     const [forks, setForks] = useState<Fork[]>([])
+    const [myFork, setMyFork] = useState<Fork | undefined>(undefined)
 
     const updateForkProgress = () => {
         api.getForks().then(res => setForks(res.data))
     }
 
     useEffect(() => {
+        api.getMyFork().then(res => {
+            if (res.status == 200) setMyFork(res.data);
+        }).catch(() => {
+        })
         updateForkProgress();
         const interval = setInterval(updateForkProgress, 1000);
         return () => clearInterval(interval);
     }, [])
 
-    const activeForks = forks.filter(fork => fork.userName);
+    const activeForks = forks.filter(fork => fork.userName && fork.inPot);
 
     return (
         <main className="mx-auto max-w-md px-4 pt-6 pb-8">
@@ -60,7 +65,10 @@ export default function Index() {
                 <div className="cartoon-card p-6 text-center">
                     <p className="text-xl font-bold">The pot is lonely!</p>
                     <p className="mt-1 text-sm text-text-muted">
-                        No forks claimed yet. Tap <strong>Add Fork</strong> below to join the feast!
+                        {myFork
+                            ? <span>Put your fork in the pot!</span>
+                            : <span>No forks claimed yet. Tap <strong>Add Fork</strong>  below to join the feast!</span>
+                        }
                     </p>
                 </div>
             ) : (
@@ -80,15 +88,18 @@ export default function Index() {
                                     isOvercooked
                                         ? "animate-sizzle bg-primary/20"
                                         : isDone
-                                          ? "animate-wiggle bg-green/20"
-                                          : ""
+                                            ? "animate-wiggle bg-green/20"
+                                            : ""
                                 }`}
                             >
                                 {isOvercooked && (
                                     <div className="pointer-events-none absolute -top-3 right-6 flex gap-1.5">
-                                        <span className="smoke-puff h-3 w-3 rounded-full border-2 border-text-main bg-border" />
-                                        <span className="smoke-puff-delay-1 h-4 w-4 rounded-full border-2 border-text-main bg-border" />
-                                        <span className="smoke-puff-delay-2 h-2.5 w-2.5 rounded-full border-2 border-text-main bg-border" />
+                                        <span
+                                            className="smoke-puff h-3 w-3 rounded-full border-2 border-text-main bg-border"/>
+                                        <span
+                                            className="smoke-puff-delay-1 h-4 w-4 rounded-full border-2 border-text-main bg-border"/>
+                                        <span
+                                            className="smoke-puff-delay-2 h-2.5 w-2.5 rounded-full border-2 border-text-main bg-border"/>
                                     </div>
                                 )}
 
