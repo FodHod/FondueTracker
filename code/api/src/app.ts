@@ -14,12 +14,15 @@ export function createApp() {
     const app = express()
 
     // Request logging: terse colored lines in dev, combined format in prod.
-    // Health probes are skipped so the Docker HEALTHCHECK does not spam.
-    app.use(
-        morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev', {
-            skip: (req) => req.path === '/healthz',
-        }),
-    )
+    // Off by default (too noisy); set REQUEST_LOGS=1 to switch it on. Health
+    // probes are skipped so the Docker HEALTHCHECK does not spam.
+    if (process.env.REQUEST_LOGS === '1') {
+        app.use(
+            morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev', {
+                skip: (req) => req.path === '/healthz',
+            }),
+        )
+    }
 
     // Request parsers: handlers see the same req.body for JSON and form payloads.
     app.use(express.json())
@@ -29,14 +32,14 @@ export function createApp() {
     app.use('/api', sessionMiddleware)
 
     // The dinner: a freshly seeded pool of forks and the food catalog.
-    const store = createForkStore()
+    const forkStore = createForkStore()
     const sensorStore = createSensorStore();
-    app.use('/api/forks', createForksRouter(store, sensorStore));
+    app.use('/api/forks', createForksRouter(forkStore, sensorStore));
     app.use('/api/foods', createFoodsRouter())
 
-    // The pot sensor's measurement log, keyed by the dinnerId in its path.
+    // The pot sensor's report endpoint, keyed by the dinnerId in its path.
     // The bearer token comes from the environment; unset means fail-closed.
-    app.use('/api/sensor', createSensorRouter(sensorStore, process.env.SENSOR_TOKEN))
+    app.use('/api/sensor', createSensorRouter(sensorStore, forkStore, process.env.SENSOR_TOKEN))
 
     // Liveness endpoint for the Docker HEALTHCHECK and k8s probes.
     app.get('/healthz', (_req, res) => {

@@ -1,7 +1,9 @@
 import { Router } from 'express'
 import { timingSafeEqual } from 'node:crypto'
-import type { SensorStore } from '../store'
+import type {ForkStore, SensorStore} from '../store'
 import type { SensorMeasurement, ForkState } from '../types'
+import {findFood} from "../catalog";
+import {logger} from "../logger";
 
 const BEARER_PREFIX = 'Bearer '
 
@@ -18,7 +20,7 @@ function tokenMatches(presented: string, expected: string): boolean {
  * bearer token; with no token configured the endpoint rejects everything
  * (fail-closed), so a deployment that forgot the secret stays protected.
  */
-export function createSensorRouter(store: SensorStore, token: string | undefined): Router {
+export function createSensorRouter(sensorStore: SensorStore, forkStore: ForkStore, token: string | undefined): Router {
     const router = Router()
 
     router.use((req, res, next) => {
@@ -58,14 +60,15 @@ export function createSensorRouter(store: SensorStore, token: string | undefined
             if (typeof tag !== 'object' || tag === null) {
                 return null
             }
-            const { id, in_pot } = tag as Record<string, unknown>
+            let { id, in_pot, food_id } = tag as Record<string, unknown>
             if (typeof id !== 'number' || !Number.isInteger(id)) {
                 return null
             }
             if (typeof in_pot !== 'boolean') {
                 return null
             }
-            parsedTags.push({ id, in_pot })
+            food_id = typeof food_id !== 'string' ? null : food_id
+            parsedTags.push(<ForkState>{id, in_pot, food_id});
         }
         return { time, temperature, tags: parsedTags }
     }
@@ -79,7 +82,21 @@ export function createSensorRouter(store: SensorStore, token: string | undefined
             return
         }
         // convert to milliseconds
-        store.append(req.params.dinnerId, { ...measurement, time: measurement.time * 1000 });
+        sensorStore.append(req.params.dinnerId, { ...measurement, time: measurement.time * 1000 });
+        for (const fork of measurement.tags) {
+            const food = findFood(fork.food_id ?? 'unknown');
+            if (!!food) {
+                const forkId = `fork-${fork.id}`;
+                const existing = forkStore.get(forkId)?.food ?? null;
+                if (existing !== null && existing.foodId !== food.foodId) {
+                    // A new piece replaces a different one already on the fork:
+                    // the dip clock restarts so no cooking time carries over.
+                    sensorStore.restartDip(forkId, req.params.dinnerId, fork.in_pot, measurement.time * 1000, measurement.temperature);
+                }
+                logger.info(`Setting food for fork ${fork.id}: ${food.foodName}`);
+                forkStore.setFood(forkId, food);
+            }
+        }
         res.status(201).json(measurement);
     })
 

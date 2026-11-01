@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { FOOD_CATALOG, findFood, hasPref } from '../catalog'
 import type {ForkStore, SensorStore} from '../store'
-import type { Food, FoodPrefChoice } from '../types'
+import type { Food, FoodPrefChoice, ForkListItem } from '../types'
 import {fondueInfo} from "../fondue-math";
 
 const MAX_USER_NAME = 30
@@ -24,7 +24,8 @@ function readPrefRecord(value: unknown): FoodPrefChoice | null {
 /**
  * The fork endpoints: list the pool (each fork carrying its holder's food
  * preferences), fetch the session user's own fork, claim a fork (one-shot,
- * one fork per guest, full preference declaration), and update the food
+ * one fork per guest, full preference declaration), leave the dinner
+ * (releasing the held fork back to the pool), and update the food
  * and/or preferences of a fork the session holds.
  */
 export function createForksRouter(store: ForkStore, sensorStore: SensorStore): Router {
@@ -32,26 +33,32 @@ export function createForksRouter(store: ForkStore, sensorStore: SensorStore): R
 
     router.get('/', (req, res) => {
         // The session user's own fork leads the list; the rest follow in id order.
-        const forks = store
+        const forks: ForkListItem[] = store
             .list()
             .map((fork) => {
+                // TODO: temperature should come from the sensor (dip.tempAtInsertC)
+                const dip = sensorStore.getDipState(fork.id, fork.dinnerId);
+                // A fork the sensor has never reported counts as out of the pot.
+                const inPot = dip?.inPot ?? false;
                 if (fork.foodPrefs === null) {
                     return {
                         ...fork,
                         progress: 0,
+                        inPot,
                     };
                 }
                 const prefsForFood = fork.foodPrefs.filter((pref) => pref.foodId === fork.food?.foodId);
-                // TODO: temperature should come from the sensor
-                const startTs = sensorStore.getFlipTime(fork.id, fork.dinnerId);
-                if (!startTs || !fork.food) {
+                if (!dip || dip.insertedAt === null || !fork.food) {
                     return {
                         ...fork,
                         progress: 0,
+                        inPot,
                     };
                 }
-                const forkInfo = fondueInfo(fork.food.foodId, prefsForFood.length > 0 ? prefsForFood[0].prefId : fork.food.prefs[0].id, 90, startTs.flipTime)
-                return { ...fork, progress: forkInfo.progress };
+                // A removed fork is judged at its removal: progress freezes there.
+                const asOf = dip.removedAt !== null ? new Date(dip.removedAt) : undefined;
+                const forkInfo = fondueInfo(fork.food.foodId, prefsForFood.length > 0 ? prefsForFood[0].prefId : fork.food.prefs[0].id, 90, new Date(dip.insertedAt), asOf)
+                return { ...fork, progress: forkInfo.progress, inPot };
             });
         forks.sort((a, b) => {
             const own = Number(b.userId === req.userId) - Number(a.userId === req.userId)
@@ -132,6 +139,18 @@ export function createForksRouter(store: ForkStore, sensorStore: SensorStore): R
         res.json(claimed)
     })
 
+    // Leaving the dinner: the fork returns to the pool empty and its dip
+    // timeline re-baselines as out of the pot, so the next holder's food
+    // inherits none of the old cooking time. Idempotent: a session that
+    // holds no fork still gets a 200 (with a null body).
+    router.post('/leave', (req, res) => {
+        const released = store.release(req.userId)
+        if (released) {
+            sensorStore.restartDip(released.id, released.dinnerId, false, Date.now())
+        }
+        res.json(released)
+    })
+
     router.put('/', (req, res) => {
         const forkId = req.body?.id
         if (typeof forkId !== 'string' || forkId.length === 0) {
@@ -198,6 +217,13 @@ export function createForksRouter(store: ForkStore, sensorStore: SensorStore): R
 
         // Everything validated; apply atomically, then respond with fresh state.
         if (food !== undefined) {
+            const existing = fork.food ?? null
+            if (food !== null && existing !== null && existing.foodId !== food.foodId) {
+                // A new piece replaces a different one already on the fork: the
+                // dip clock restarts so no cooking time carries over.
+                const dip = sensorStore.getDipState(forkId, fork.dinnerId)
+                sensorStore.restartDip(forkId, fork.dinnerId, dip?.inPot ?? false, Date.now())
+            }
             store.setFood(forkId, food)
         }
         for (const pref of prefChanges) {

@@ -21,4 +21,5 @@ export type Fork = {
     foodPrefs: FoodPrefChoice[] | null;
     progress: number;
     color: string;
+    inPot: boolean;
 }

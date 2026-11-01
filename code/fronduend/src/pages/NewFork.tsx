@@ -28,7 +28,14 @@ export default function NewFork() {
         })
 
         api.getFoods().then(res => {
-            setFoods(res.data);
+            const loadedFoods: Food[] = res.data;
+            setFoods(loadedFoods);
+            setForm(prev => ({
+                ...prev,
+                foodPrefs: loadedFoods.flatMap(food =>
+                    food.prefs[0] ? [{foodId: food.foodId, prefId: food.prefs[0].id}] : []
+                )
+            }));
         })
 
         api.getForks().then(res => {
@@ -60,54 +67,134 @@ export default function NewFork() {
             id: form.forkId,
             userName: form.userName,
             foodPrefs: form.foodPrefs,
-            food: undefined,
+            food: null,
             progress: 0,
             color: "",
+            inPot: false,
         }).then(() => {
             navigate("/")
         })
     }
 
-    return <>
-        <form onSubmit={onSubmit}>
-            <input
-                type={"text"}
-                value={form.userName}
-                placeholder={"Username"}
-                required
-                onChange={e => setForm(prev => ({
-                    ...prev,
-                    userName: e.target.value
-                }))}
-            />
-            <h2>Food preferences</h2>
-            {foods.map(food => <fieldset key={food.foodId}>
-                <h3>{food.foodName}</h3>
-                {food.prefs.map(pref => <label key={pref.id}>
-                        <input
-                            type={"radio"}
-                            name={food.foodId}
-                            value={pref.id}
-                            onChange={changeFoodPref}
-                        />
-                        {pref.name}
+    return (
+        <main className="mx-auto max-w-md px-4 pt-6 pb-8">
+            <header className="mb-6 text-center">
+                <h1 className="mt-2 text-3xl font-bold">Join the pot</h1>
+            </header>
+
+            <form onSubmit={onSubmit} className="flex flex-col gap-5">
+                <div className="cartoon-card p-4">
+                    <label className="mb-1.5 block text-sm font-bold">
+                        Name
                     </label>
-                )}
-            </fieldset>)}
-            <h2>Choose fork</h2>
-            {forks.map(fork => <label key={fork.id}>
-                <input
-                    type={"radio"}
-                    name={"fork"}
-                    value={fork.id}
-                    onChange={e => setForm(prev => ({
-                        ...prev,
-                        forkId: e.target.value
-                    }))}
-                />
-                {fork.id}
-            </label>)}
-            <input type={"submit"} value={"Choose Fork"}/>
-        </form>
-    </>
+                    <input
+                        type={"text"}
+                        value={form.userName}
+                        placeholder={"Meat Dangler"}
+                        required
+                        className="w-full rounded-xl border-2 border-text-main bg-bg px-3.5 py-2 font-medium placeholder:text-text-muted/70 focus:bg-white focus:outline-none"
+                        onChange={e => setForm(prev => ({
+                            ...prev,
+                            userName: e.target.value
+                        }))}
+                    />
+                </div>
+
+                <div className="cartoon-card p-4">
+                    <h2 className="mb-1 text-base font-bold">
+                        How do you like it?
+                    </h2>
+                    <div className="flex flex-col gap-3">
+                        {foods.map(food => {
+                            const selectedPref = form.foodPrefs.find(p => p.foodId === food.foodId)?.prefId;
+                            return (
+                                <fieldset key={food.foodId} className="rounded-xl border-2 border-border bg-bg/60 p-3">
+                                    <h3 className="mb-2 text-sm font-bold">{food.foodName}</h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        {food.prefs.map(pref => {
+                                            const isSelected = selectedPref === pref.id;
+                                            return (
+                                                <label
+                                                    key={pref.id}
+                                                    className={`cursor-pointer rounded-full border-2 border-text-main px-3 py-1 text-xs font-semibold transition-all ${
+                                                        isSelected
+                                                            ? "bg-secondary shadow-[2px_2px_0px_#3D2D23] -translate-y-0.5"
+                                                            : "bg-white opacity-80 hover:opacity-100"
+                                                    }`}
+                                                >
+                                                    <input
+                                                        type={"radio"}
+                                                        name={food.foodId}
+                                                        value={pref.id}
+                                                        checked={isSelected}
+                                                        required
+                                                        onChange={changeFoodPref}
+                                                        className="sr-only"
+                                                    />
+                                                    {pref.name}
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </fieldset>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="cartoon-card p-4">
+                    <h2 className="mb-2 text-base font-bold">
+                        Pick your fork
+                    </h2>
+                    <div className="grid grid-cols-2 gap-2.5">
+                        {forks.map(fork => {
+                            const isSelected = form.forkId === fork.id;
+                            const isUsed = Boolean(fork.userName);
+                            return (
+                                <label
+                                    key={fork.id}
+                                    className={`flex items-center gap-2 rounded-xl border-2 border-text-main px-3 py-2 text-sm font-semibold transition-all ${
+                                        isSelected
+                                            ? "bg-primary shadow-[3px_3px_0px_#3D2D23] -translate-y-0.5"
+                                            : isUsed
+                                                ? "cursor-not-allowed bg-bg opacity-45"
+                                                : "cursor-pointer bg-bg hover:bg-white"
+                                    }`}
+                                >
+                                    <input
+                                        type={"radio"}
+                                        name={"fork"}
+                                        value={fork.id}
+                                        disabled={isUsed}
+                                        required
+                                        onChange={e => setForm(prev => ({
+                                            ...prev,
+                                            forkId: e.target.value
+                                        }))}
+                                        className="sr-only"
+                                    />
+                                    <span
+                                        className="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-text-main"
+                                        style={{backgroundColor: fork.color || "var(--color-primary)"}}
+                                    />
+                                    <span className="truncate">
+                                        {isUsed
+                                            ? fork.userName
+                                            : fork.id.charAt(0).toUpperCase() + fork.id.slice(1).replace("-", " ")}
+                                    </span>
+                                </label>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <button
+                    type={"submit"}
+                    className="cartoon-button w-full rounded-2xl bg-tertiary py-3 text-lg font-bold text-text-main"
+                >
+                    Dive Into The Pot!
+                </button>
+            </form>
+        </main>
+    );
 }

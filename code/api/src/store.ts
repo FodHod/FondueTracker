@@ -1,4 +1,5 @@
 import { FOOD_CATALOG } from './catalog'
+import { logger } from './logger'
 import type {Fork, Food, SensorMeasurement} from './types'
 
 /** The single dinner this deployment hosts; dinner rooms come later. */
@@ -110,6 +111,25 @@ export function createForkStore() {
         return serialize(fork)
     }
 
+    /**
+     * Releases the user's fork back to the pool, emptied of its food; null
+     * when they hold none. The holder's standing preferences survive the
+     * release — they ride only on a held fork and are re-declared at the
+     * next claim anyway.
+     */
+    function release(userId: string): Fork | null {
+        for (const fork of forks.values()) {
+            if (fork.userId === userId) {
+                fork.userId = null
+                fork.userName = null
+                fork.food = null
+                fork.progress = 0
+                return serialize(fork)
+            }
+        }
+        return null
+    }
+
     /** Sets or clears the fork's food; null when the fork does not exist. */
     function setFood(id: string, food: Food | null): Fork | null {
         const fork = forks.get(id)
@@ -130,71 +150,112 @@ export function createForkStore() {
         prefs.set(foodId, prefId)
     }
 
-    return { list, get, forUser, holdsFork, assign, setFood, setPref }
+    return { list, get, forUser, holdsFork, assign, release, setFood, setPref }
 }
 
-function cloneMeasurement(m: SensorMeasurement): SensorMeasurement {
-    return { time: m.time, temperature: m.temperature, tags: m.tags.map((tag) => ({ ...tag })) }
+/** The materialized dip state of one fork in one dinner. */
+export type DipState = {
+    /** The fork's status in the latest report that covered it. */
+    inPot: boolean
+    /** Start of the current or most recent dip (ms); null before the first insertion. */
+    insertedAt: number | null
+    /** End of the most recent dip (ms); null while the dip is running. */
+    removedAt: number | null
+    /** Broth temperature at the start of the current or most recent dip. */
+    tempAtInsertC: number | null
 }
 
 export type SensorStore = ReturnType<typeof createSensorStore>
 
 /**
- * The in-memory sensor log: an append-only list of measurements per dinner,
- * keyed by the dinnerId in the sensor route path. Resets with the process;
- * deliberately unbounded — a dinner is hours, not weeks.
+ * The pot sensor's materialized state: per dinner and fork, only the dip
+ * facts progress needs — when the current or last dip started, when it
+ * ended, and the broth temperature it started at. Reports fold into this
+ * state machine in place; no measurement history is kept. Resets with the
+ * process.
  */
 export function createSensorStore() {
-    const log = new Map<string, SensorMeasurement[]>()
+    const dinners = new Map<string, Map<string, DipState>>()
 
-    /**
-     * Check if the specific fork is in the pot at the given measurement
-     * @param measurement
-     * @param forkId
-     */
-    function getStatusForForkId(measurement: SensorMeasurement, forkId: string): boolean {
-        const forkState = measurement.tags.filter(tag => `fork-${tag.id}` === forkId);
-        return forkState.length > 0 && forkState[0].in_pot;
+    /** Stamps the dip boundary a status change crosses. */
+    function transition(forkId: string, rec: DipState, inPot: boolean, timeMs: number, tempC: number): void {
+        if (rec.inPot === inPot) {
+            return
+        }
+        rec.inPot = inPot
+        if (inPot) {
+            rec.insertedAt = timeMs
+            rec.removedAt = null
+            rec.tempAtInsertC = tempC
+            logger.info('fork dipped', { forkId, at: new Date(timeMs).toISOString() })
+        } else {
+            rec.removedAt = timeMs
+            logger.info('fork removed', { forkId, at: new Date(timeMs).toISOString() })
+        }
     }
 
-    /**
-     * Get the time at which the fork flipped from in_pot=true to in_pot=false or vice-versa.
-     * @param forkId The id of the fork.
-     * @param dinner The id of the dinner.
-     */
-    function getFlipTime(forkId: string, dinner: string): { insertedInPot: boolean, flipTime: Date } | null {
-        const events = log.get(dinner);
-        if (!events) {
-            return null;
+    /** Folds one report into the dinner's state. */
+    function append(dinnerId: string, measurement: SensorMeasurement): void {
+        let records = dinners.get(dinnerId)
+        if (!records) {
+            records = new Map()
+            dinners.set(dinnerId, records)
+        }
+        const { time, temperature, tags } = measurement
+
+        // A tag absent from a report reads as out of the pot.
+        for (const [forkId, rec] of records) {
+            const tag = tags.find((t) => `fork-${t.id}` === forkId)
+            transition(forkId, rec, tag ? tag.in_pot : false, time, temperature)
         }
 
-        const tagId = forkId;
-        const newestStatus = getStatusForForkId(events[events.length - 1], tagId);
-        for (let i = events.length - 1; i >= 0; i--) {
-            const event = events[i];
-            const currentStatus = getStatusForForkId(event, tagId);
-            if (newestStatus !== currentStatus) {
-                return { insertedInPot: newestStatus, flipTime: new Date(event.time) };
+        // A tag first seen already in the pot counts as inserted at that report.
+        for (const tag of tags) {
+            const forkId = `fork-${tag.id}`
+            if (records.has(forkId)) {
+                continue
+            }
+            records.set(forkId, {
+                inPot: tag.in_pot,
+                insertedAt: tag.in_pot ? time : null,
+                removedAt: null,
+                tempAtInsertC: tag.in_pot ? temperature : null,
+            })
+            if (tag.in_pot) {
+                logger.info('fork dipped', { forkId, at: new Date(time).toISOString() })
             }
         }
-
-        return null;
     }
 
-    /** Appends a copy of the measurement to the dinner's log. */
-    function append(dinnerId: string, measurement: SensorMeasurement): void {
-        const entries = log.get(dinnerId)
-        if (entries) {
-            entries.push(cloneMeasurement(measurement))
-        } else {
-            log.set(dinnerId, [cloneMeasurement(measurement)])
+    /** The fork's dip state in that dinner, as a copy; null when unknown. */
+    function getDipState(forkId: string, dinnerId: string): DipState | null {
+        const rec = dinners.get(dinnerId)?.get(forkId)
+        return rec ? { ...rec } : null
+    }
+
+    /**
+     * Re-baselines the fork's dip timeline: a food change must not carry the
+     * old piece's cooking progress over to the new one. In the pot, the new
+     * food counts as dipped since `timeMs`; out of it, the timeline clears
+     * entirely. No-op for a fork the sensor has never reported.
+     */
+    function restartDip(forkId: string, dinnerId: string, inPot: boolean, timeMs: number, tempC?: number): void {
+        const rec = dinners.get(dinnerId)?.get(forkId)
+        if (!rec) {
+            return
         }
+        rec.inPot = inPot
+        if (inPot) {
+            rec.insertedAt = timeMs
+            rec.removedAt = null
+            rec.tempAtInsertC = tempC ?? rec.tempAtInsertC
+        } else {
+            rec.insertedAt = null
+            rec.removedAt = null
+            rec.tempAtInsertC = null
+        }
+        logger.info('dip re-baselined for a new food', { forkId, inPot, at: new Date(timeMs).toISOString() })
     }
 
-    /** The dinner's measurements, oldest first, as copies. */
-    function list(dinnerId: string): SensorMeasurement[] {
-        return (log.get(dinnerId) ?? []).map(cloneMeasurement)
-    }
-
-    return { append, list, getFlipTime };
+    return { append, getDipState, restartDip }
 }

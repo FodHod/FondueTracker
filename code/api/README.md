@@ -1,7 +1,7 @@
 # FondueTracker API
 
 Express API that tracks a shared fondue dinner: who holds which fork, what food is
-on it, and — by joining the forks with the pot sensor's measurement log — how done
+on it, and — by joining the forks with the pot sensor's reports — how done
 that food is. State is in-memory (one dinner, reset on restart/redeploy); users are
 identified by an opaque session cookie.
 
@@ -58,23 +58,27 @@ user holds (if any) comes first; the rest follow in id order. Each claimed
 fork carries its holder's `foodPrefs` — the exhaustive one-choice-per-food
 set, in catalog order. Unclaimed forks have `foodPrefs: null`.
 
+Every item also carries `inPot`: true while the pot sensor's latest report
+has the fork in the pot, false otherwise — a fork the sensor has never
+reported reads as out of the pot. Like `progress`, `inPot` is computed per
+request and appears only on this endpoint.
+
 This is the only endpoint that computes `progress`. For a claimed fork with
-food on it, the API finds the fork tag's most recent in/out flip in the
-sensor log — the moment it last entered or left the pot — and compares the
-time since that flip with the estimated dipping window for the food and
-the holder's chosen doneness (`src/fondue-math.ts`; the broth temperature
-is hardcoded to 90 °C and does not affect the estimate yet). `progress`
+food on it, the API reads the fork's materialized dip state — when its
+current or last dip started, and when it ended, if the fork has left the
+pot — and compares the dip's elapsed time with the estimated dipping
+window for the food and the holder's chosen doneness
+(`src/fondue-math.ts`; the broth temperature is hardcoded to 90 °C and
+does not affect the estimate yet). While the fork is in the pot the clock
+runs from its insertion; once the fork leaves, `progress` freezes at the
+value the dip had reached, until the fork is dipped again. A tag first
+seen already in the pot counts as inserted at that report. `progress`
 ramps linearly from `0` to `1`, reaching `1.0` — done, safe to eat — at
 the earliest estimated take-out moment, holds `1.0` through the rest of
 the window, and flips to `2` ("too late") once the latest estimate is
-exceeded. It is `0` when there is nothing to track — an unclaimed fork,
-or no flip for it in the log — and the other fork responses (`POST`,
+exceeded. It is `0` when there is nothing to track — an unclaimed fork, no
+food on it, or no dip recorded — and the other fork responses (`POST`,
 `PUT`, `/mine`) return the stored value, which is always `0`.
-
-Known issues in the current progress model:
-
-- The flip used as the cooking start is the most recent one even when the
-  fork has left the pot: time out of the pot keeps accruing toward `2`.
 
 ### POST /api/forks
 
@@ -130,8 +134,25 @@ neither is rejected.
 - `400` missing `id`, malformed `food`, unknown `foodId`, malformed or invalid
   `foodPrefs`, or an empty PUT
 
-There is deliberately no release or rename endpoint in v1: a claimed fork stays
-claimed until the process restarts.
+Renaming a claimed fork stays out of scope in v1; releasing one back to the
+pool is `POST /api/forks/leave` (below).
+
+### POST /api/forks/leave
+
+Leave the dinner: release your fork back to the pool. No body is expected —
+the session is the identity and a guest holds at most one fork, so any
+request body is ignored. The fork returns to the pool unclaimed and empty:
+`food` cleared, `foodPrefs` and `progress` reset — free for any guest to
+claim again, including you, with the same or another fork.
+
+Leaving also re-baselines the fork's dip timeline as out of the pot, so no
+cooking time carries over to the next holder's food: when the sensor next
+reports the fork in the pot, a fresh dip starts at that report.
+
+Responds `200` with the released fork, or `200` with `null` when the session
+held no fork — the endpoint is idempotent, so leaving twice, or leaving
+without ever claiming, is not an error. Your standing food preferences stay
+with your session and are re-declared in full on your next claim.
 
 ### POST /api/sensor/:dinnerId
 
@@ -147,10 +168,12 @@ named in the path (the frontend's four endpoints are unaffected):
 ```
 
 `time` and `temperature` must be numbers, `tags` an array of `{ id, in_pot }`
-records (possibly empty); extra fields are ignored. The measurement is
-appended to that dinner's in-memory log — `GET /api/forks` reads it to time
-each fork's dips — and it resets with the process. Responds `201` with the
-stored measurement.
+records (possibly empty); extra fields are ignored. Each report folds into
+that dinner's materialized dip state — per fork, when its current or last
+dip started and ended, and the broth temperature it started at — which
+`GET /api/forks` reads to time each fork's dips. No measurement history is
+kept, and the state resets with the process. Responds `201` with the
+measurement.
 
 Requests must carry `Authorization: Bearer <token>`. The expected token comes
 from the `SENSOR_TOKEN` environment variable — in the cluster, mounted from
@@ -171,9 +194,10 @@ starts a new session and overwrites the jar, silently turning you into a
 different guest.
 
 The walkthrough picks the first unclaimed fork, so it works even on a dinner
-with leftovers — claims are one-shot and there is no release endpoint, so a
-hardcoded fork would collide with earlier runs. When no fork is free, restart
-the API: the dinner is in-memory and resets with the process. Adjust the port
+with leftovers — claims are one-shot, and earlier runs hold their forks
+unless they left via `POST /api/forks/leave`, so a hardcoded fork would
+collide with them. When no fork is free, have a holder leave or restart the
+API: the dinner is in-memory and resets with the process. Adjust the port
 if your server runs elsewhere; a jar saved against one instance does not work
 against another — the claim simply does not exist there.
 
@@ -214,6 +238,11 @@ curl -s -b cookies.txt -c cookies.txt -X PUT http://localhost:8082/api/forks \
   -H 'Content-Type: application/json' \
   -d "$(jq -nc --arg id "$FORK" '{id: $id, food: null}')" | jq
 
+# Leave the dinner — releases your fork back to the pool, empty and with a
+# fresh dip clock (idempotent: 200 even if you hold none; the jar keeps its
+# session, so you can claim again).
+curl -s -b cookies.txt -c cookies.txt -X POST http://localhost:8082/api/forks/leave | jq
+
 # Show just my fork
 curl -s -b cookies.txt -c cookies.txt http://localhost:8082/api/forks/mine
 
@@ -236,7 +265,9 @@ npm run typecheck  # tsc --noEmit
 
 Environment: `PORT` (default 8080), `FORK_COUNT` (default 8), `SENSOR_TOKEN`
 (the sensor endpoint's bearer token; unset = the endpoint rejects everything),
-and `NODE_ENV=production` (adds the `Secure` attribute to the cookie — set in
+`LOG_LEVEL` (the winston logger's level; default `debug`), `REQUEST_LOGS=1`
+(lets morgan log HTTP requests; off by default), and
+`NODE_ENV=production` (adds the `Secure` attribute to the cookie — set in
 the k8s deployment, which mounts `SENSOR_TOKEN` from the `sensor-token`
 secret).
 

@@ -23,11 +23,19 @@ MARKER = "rings"
 RING_UNIT_PX = 8
 SEARCH_SCALE = 0.4
 CAMERA = "picam"
-POT_CHECK_EVERY = 60  # frames between AprilTag scans for the pot markers
+POT_CHECK_EVERY = 60
+# AprilTag IDs on the pot rim; the pot circle is fitted through these only.
+POT_TAG_IDS = (0, 1, 2, 4)
+# AprilTag ID -> (meat on the plate next to that tag, color in the preview as RGB).
+MEAT_TAGS = {
+    3: ("beef", (220, 30, 30)),
+    5: ("chicken", (255, 210, 0)),
+}
+MEAT_RADIUS_PX = 60  # fork tip within this of a meat tag -> fork gets that meat
 # Fork tip = code center + this many px along the code's START->STOP direction.
 # In the pot when the tip is inside the pot circle. Negative if the strip is wrapped
 # with START toward the tines.
-TIP_OFFSET_PX = 300
+TIP_OFFSET_PX = 370
 
 DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
@@ -97,14 +105,18 @@ def camera_frames(source: str):
         finally:
             cap.release()
 
-pot_tags = {}  # AprilTag id -> last seen center; kept when a scan doesn't see it
+# AprilTag id -> last seen center; kept when a scan doesn't see it
+pot_tags = {}
+meat_tags = {}
+fork_meat = {}  # fork id -> meat tag id its tip last visited; kept until it visits another
 
 
-def update_pot_tags(frame: np.ndarray):
-    seen = detect_apriltag(frame)
-    for t in seen:
-        pot_tags[t["id"]] = t["center"]
-
+def update_apriltags(frame: np.ndarray):
+    for t in detect_apriltag(frame):
+        if t["id"] in POT_TAG_IDS:
+            pot_tags[t["id"]] = t["center"]
+        elif t["id"] in MEAT_TAGS:
+            meat_tags[t["id"]] = t["center"]
 
 
 def pot_circle():
@@ -129,6 +141,28 @@ def draw_pot(image: np.ndarray) -> np.ndarray:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 128, 0), 2)
     return image
 
+
+def update_fork_meat(tags: list[dict], tips: list[np.ndarray]):
+    for t, tip in zip(tags, tips):
+        for tag_id, center in meat_tags.items():
+            if np.hypot(*(tip - center)) < MEAT_RADIUS_PX:
+                fork_meat[t["id"]] = tag_id
+
+
+def meat_color(tag_id: int) -> tuple:
+    return MEAT_TAGS[tag_id][1][::-1]  # RGB -> OpenCV's BGR
+
+
+def draw_meats(image: np.ndarray) -> np.ndarray:
+    for tag_id, (x, y) in meat_tags.items():
+        name, color = MEAT_TAGS[tag_id][0], meat_color(tag_id)
+        cv2.circle(image, (int(x), int(y)), MEAT_RADIUS_PX, color, 2)
+        cv2.drawMarker(image, (int(x), int(y)), color, cv2.MARKER_DIAMOND, 20, 2)
+        cv2.putText(image, f"{tag_id}: {name}", (int(x) + 12, int(y) - 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+    return image
+
+
 def fork_tip(tag: dict) -> np.ndarray:
     """Estimated tip position; AprilTags have no direction, so their center is used."""
     if "start" not in tag:
@@ -152,6 +186,10 @@ def draw_tips(image: np.ndarray, tags: list[dict]) -> np.ndarray:
         color = (0, 255, 0) if is_in_pot({"x": tip[0], "y": tip[1]}) else (0, 0, 255)
         cv2.line(image, tuple(t["center"].astype(int)), tuple(tip.astype(int)), color, 2)
         cv2.circle(image, tuple(tip.astype(int)), 8, color, -1)
+        if t["id"] in fork_meat:
+            meat = fork_meat[t["id"]]
+            cv2.putText(image, MEAT_TAGS[meat][0], tuple(tip.astype(int) + 12),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, meat_color(meat), 2)
     return image
 
 def create_output(tags):
@@ -182,14 +220,15 @@ def on_tags(tags: list[dict], now: float):
                 in_pot[fork["id"]] = True
     smoothed_tags = []
     for fork_id, fork_in_pot in in_pot.items():
-        smoothed_tags.append({"id": fork_id, "in_pot": fork_in_pot})
+        smoothed_tags.append({"id": fork_id, "in_pot": fork_in_pot,
+                              "food_id": MEAT_TAGS[fork_meat[fork_id]][0] if fork_id in fork_meat else None})
 
     smoothed_output = {
         "time": boolean_output["time"],
         "temperature": boolean_output["temperature"],
         "tags": smoothed_tags,
     }
-    if tags and now - last_sent >= SEND_INTERVAL:
+    if now - last_sent >= SEND_INTERVAL:
         last_sent = now  # also when the queue is full, so we retry next interval, not next frame
         try:
             send_queue.put_nowait(smoothed_output)
@@ -216,16 +255,18 @@ def main():
     try:
         for frame in camera_frames(CAMERA):
             if len(pot_tags) < 3 or frames % POT_CHECK_EVERY == 0:
-                update_pot_tags(frame)
+                update_apriltags(frame)
             tags = detect(frame)
             now = time.monotonic() - start
             tips = [fork_tip(t) for t in tags]
+            update_fork_meat(tags, tips)
             on_tags([{"id": t["id"], "x": float(tip[0]), "y": float(tip[1])}
                         for t, tip in zip(tags, tips)], now)
 
             detections += len(tags)
             frames += 1
-            cv2.imshow(MARKER, draw_tips(draw(draw_pot(frame.copy()), tags), tags))
+            preview = draw_meats(draw_pot(frame.copy()))
+            cv2.imshow(MARKER, draw_tips(draw(preview, tags), tags))
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
                 break

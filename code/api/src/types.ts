@@ -26,9 +26,19 @@ export type Fork = {
     color: string;
 }
 
+/**
+ * A fork as listed by GET /api/forks: the stored fork plus `inPot`, the pot
+ * sensor's latest word on whether the fork is currently in the pot (false
+ * when the sensor has never reported the fork).
+ */
+export type ForkListItem = Fork & {
+    inPot: boolean;
+}
+
 export type ForkState = {
     id: number;
     in_pot: boolean;
+    food_id: string | null;
 }
 
 export type SensorMeasurement = {
