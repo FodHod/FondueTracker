@@ -9,9 +9,8 @@ function getFoods() {
     return axios.get<Food[]>("/api/foods");
 }
 
-// TODO: was kommt hier zurück?
 function postFork(fork: Fork) {
-    return axios.post("/api/forks", fork);
+    return axios.post<Fork>("/api/forks", fork);
 }
 
 function getMyFork() {
