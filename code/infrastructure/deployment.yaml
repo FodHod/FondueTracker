@@ -86,3 +86,31 @@ spec:
   - hosts:
     - fonduetracker.rovner.ch
     secretName: fonduetracker-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  labels:
+    app: fonduetracker
+  name: fonduetracker-official
+  namespace: fonduetracker
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: fonduetracker.ch
+    http:
+      paths:
+      - backend:
+          service:
+            name: fonduetracker
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - fonduetracker.ch
+    secretName: fonduetracker-official-tls
