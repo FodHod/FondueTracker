@@ -28,7 +28,14 @@ export default function NewFork() {
         })
 
         api.getFoods().then(res => {
-            setFoods(res.data);
+            const loadedFoods: Food[] = res.data;
+            setFoods(loadedFoods);
+            setForm(prev => ({
+                ...prev,
+                foodPrefs: loadedFoods.flatMap(food =>
+                    food.prefs[0] ? [{foodId: food.foodId, prefId: food.prefs[0].id}] : []
+                )
+            }));
         })
 
         api.getForks().then(res => {
@@ -121,6 +128,7 @@ export default function NewFork() {
                                                         type={"radio"}
                                                         name={food.foodId}
                                                         value={pref.id}
+                                                        checked={isSelected}
                                                         required
                                                         onChange={changeFoodPref}
                                                         className="sr-only"
