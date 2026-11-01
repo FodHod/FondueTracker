@@ -31,11 +31,11 @@ MEAT_TAGS = {
     3: ("beef", (220, 30, 30)),
     5: ("chicken", (255, 210, 0)),
 }
-MEAT_RADIUS_PX = 60  # fork tip within this of a meat tag -> fork gets that meat
+MEAT_RADIUS_PX = 80  # fork tip within this of a meat tag -> fork gets that meat
 # Fork tip = code center + this many px along the code's START->STOP direction.
 # In the pot when the tip is inside the pot circle. Negative if the strip is wrapped
 # with START toward the tines.
-TIP_OFFSET_PX = 370
+TIP_OFFSET_PX = 350
 
 DETECTOR = cv2.aruco.ArucoDetector(
     cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11),
