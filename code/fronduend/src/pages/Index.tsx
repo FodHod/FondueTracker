@@ -13,6 +13,21 @@ function getForkQuip(progressPct: number, inPot: boolean, isOvercooked: boolean)
     return "Done! Ready to eat";
 }
 
+function getContrastTextColor(bgColor: string): string {
+    const hex = bgColor.trim().replace("#", "");
+    if (!/^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(hex)) {
+        return "#3D2D23";
+    }
+    const fullHex = hex.length === 3
+        ? hex.split("").map(c => c + c).join("")
+        : hex;
+    const r = parseInt(fullHex.slice(0, 2), 16);
+    const g = parseInt(fullHex.slice(2, 4), 16);
+    const b = parseInt(fullHex.slice(4, 6), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance < 0.52 ? "#FFF9EF" : "#3D2D23";
+}
+
 export default function Index() {
     const [forks, setForks] = useState<Fork[]>([])
 
@@ -55,7 +70,8 @@ export default function Index() {
                         const pct = Math.min(100, Math.max(0, rawPct));
                         const isOvercooked = fork.progress > 1;
                         const isDone = pct >= 100 && !isOvercooked;
-                        const forkColor = fork.color || "var(--color-primary)";
+                        const forkColor = fork.color || "#F08E76";
+                        const badgeTextColor = isOvercooked ? "#FFF9EF" : getContrastTextColor(forkColor);
 
                         return (
                             <div
@@ -90,7 +106,7 @@ export default function Index() {
                                         className="rounded-full border-2 border-text-main px-2.5 py-0.5 text-sm font-bold shadow-[2px_2px_0px_#3D2D23]"
                                         style={{
                                             backgroundColor: isOvercooked ? "var(--color-text-main)" : forkColor,
-                                            color: isOvercooked ? "var(--color-bg)" : "#3D2D23",
+                                            color: badgeTextColor,
                                         }}
                                     >
                                         {isOvercooked ? "OVERCOOKED" : `${pct}%`}
