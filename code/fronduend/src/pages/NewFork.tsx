@@ -76,8 +76,6 @@ export default function NewFork() {
         })
     }
 
-    const availableForks = forks.filter(fork => !fork.userName);
-
     return (
         <main className="mx-auto max-w-md px-4 pt-6 pb-8">
             <header className="mb-6 text-center">
@@ -149,21 +147,25 @@ export default function NewFork() {
                         Pick your fork
                     </h2>
                     <div className="grid grid-cols-2 gap-2.5">
-                        {availableForks.map(fork => {
+                        {forks.map(fork => {
                             const isSelected = form.forkId === fork.id;
+                            const isUsed = Boolean(fork.userName);
                             return (
                                 <label
                                     key={fork.id}
-                                    className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-text-main px-3 py-2 text-sm font-semibold transition-all ${
+                                    className={`flex items-center gap-2 rounded-xl border-2 border-text-main px-3 py-2 text-sm font-semibold transition-all ${
                                         isSelected
                                             ? "bg-primary shadow-[3px_3px_0px_#3D2D23] -translate-y-0.5"
-                                            : "bg-bg hover:bg-white"
+                                            : isUsed
+                                                ? "cursor-not-allowed bg-bg opacity-45"
+                                                : "cursor-pointer bg-bg hover:bg-white"
                                     }`}
                                 >
                                     <input
                                         type={"radio"}
                                         name={"fork"}
                                         value={fork.id}
+                                        disabled={isUsed}
                                         required
                                         onChange={e => setForm(prev => ({
                                             ...prev,
@@ -175,8 +177,11 @@ export default function NewFork() {
                                         className="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-text-main"
                                         style={{backgroundColor: fork.color || "var(--color-primary)"}}
                                     />
-                                    <span
-                                        className="truncate">{fork.id.charAt(0).toUpperCase() + fork.id.slice(1).replace("-", " ")}</span>
+                                    <span className="truncate">
+                                        {isUsed
+                                            ? fork.userName
+                                            : fork.id.charAt(0).toUpperCase() + fork.id.slice(1).replace("-", " ")}
+                                    </span>
                                 </label>
                             );
                         })}
