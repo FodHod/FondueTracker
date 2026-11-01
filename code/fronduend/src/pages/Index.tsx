@@ -47,7 +47,7 @@ export default function Index() {
 
     const activeForks = forks
         .filter(fork => fork.userName && fork.inPot)
-        .sort((a, b) => a.progress - b.progress);
+        .sort((a, b) => b.progress - a.progress);
 
     return (
         <main className="mx-auto max-w-md px-4 pt-6 pb-8">
